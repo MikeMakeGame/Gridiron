@@ -3,7 +3,7 @@ import { useState } from 'preact/hooks';
 import type { Game } from '../espn/model';
 import { periodLabel } from '../espn/model';
 import { useWidth } from '../hooks/usePoll';
-import { teamVars } from '../format';
+import { teamVars, wpText } from '../format';
 
 const H = 96;
 
@@ -30,6 +30,7 @@ export function WpChart({ g }: { g: Game }) {
 
   const sel = pick != null ? pts[pick] : null;
   const homeNow = last?.wpHome ?? null;
+  const done = g.state === 'post';
 
   return (
     <div class="wpchart-wrap">
@@ -58,11 +59,13 @@ export function WpChart({ g }: { g: Game }) {
             <b>
               {periodLabel(sel.period)} {sel.clock}
             </b>{' '}
-            {sel.wpHome! >= 0.5 ? `${g.home.abbr} ${Math.round(sel.wpHome! * 100)}%` : `${g.away.abbr} ${Math.round((1 - sel.wpHome!) * 100)}%`} · {sel.text}
+            {sel.wpHome! >= 0.5 ? `${g.home.abbr} ${wpText(sel.wpHome!)}` : `${g.away.abbr} ${wpText(1 - sel.wpHome!)}`} · {sel.text}
           </>
+        ) : done ? (
+          <span class="wp-hint">Drag the chart to read win probability at any play.</span>
         ) : homeNow != null ? (
           <>
-            Win probability now: <b>{homeNow >= 0.5 ? `${g.home.abbr} ${Math.round(homeNow * 100)}%` : `${g.away.abbr} ${Math.round((1 - homeNow) * 100)}%`}</b>
+            Win probability now: <b>{homeNow >= 0.5 ? `${g.home.abbr} ${wpText(homeNow)}` : `${g.away.abbr} ${wpText(1 - homeNow)}`}</b>
             <span class="wp-hint"> · drag the chart to read any play</span>
           </>
         ) : (

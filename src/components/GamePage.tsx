@@ -140,7 +140,7 @@ export function GamePage({ id }: { id: string }) {
           <div class={`situation${g.situation.redZone ? ' is-redzone' : ''}`}>
             <span class="sit-text">{g.situation.text}</span>
             {g.situation.redZone && <span class="sit-extra">Red zone</span>}
-            {possLeft != null && possLeft < 6 && <span class="sit-extra">≈{Math.max(1, Math.round(possLeft))} possessions left</span>}
+            {possLeft != null && possLeft < 6 && <span class="sit-extra">{possessionsText(possLeft)}</span>}
           </div>
         )}
         {headline && (
@@ -181,6 +181,11 @@ export function GamePage({ id }: { id: string }) {
       <JumpBar />
     </div>
   );
+}
+
+function possessionsText(n: number): string {
+  const k = Math.max(1, Math.round(n));
+  return `≈${k} possession${k === 1 ? '' : 's'} left`;
 }
 
 function TeamCell({ t, poss, tos }: { t: TeamInfo; poss: boolean; tos: number | null }) {

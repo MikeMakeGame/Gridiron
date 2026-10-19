@@ -28,6 +28,15 @@ export function kickoffText(iso: string): string {
   return d.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
 }
 
+// Win probability for a team, never "100%" or "0%" while the game is still going.
+export function wpText(x: number, final = false): string {
+  if (!final) {
+    if (x > 0.995) return '>99%';
+    if (x < 0.005) return '<1%';
+  }
+  return `${Math.round(x * 100)}%`;
+}
+
 export function agoText(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
   if (s < 60) return `${s}s ago`;
