@@ -6,7 +6,15 @@ export const signed = (x: number | null | undefined, digits = 2) =>
   x == null ? '–' : `${x > 0 ? '+' : x < 0 ? '−' : ''}${Math.abs(x).toFixed(digits)}`;
 
 export function teamVars(t: Pick<TeamInfo, 'color' | 'color2'>): Record<string, string> {
-  return { '--tc': t.color, '--tc2': t.color2 };
+  return { '--tc': isNeutral(t.color) ? t.color2 : t.color, '--tc2': t.color2 };
+}
+
+// Black, white and greys carry no team identity on a dark page.
+function isNeutral(hex: string): boolean {
+  const m = hex.match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+  if (!m) return false;
+  const [r, g, b] = m.slice(1).map((x) => parseInt(x, 16));
+  return Math.max(r, g, b) - Math.min(r, g, b) < 24;
 }
 
 // ESPN's image combiner serves a small logo instead of the 500px PNG; the snapshot bundles its own copies.

@@ -149,7 +149,14 @@ def ep_of(table, down: int, dist: int, ytg: int) -> float:
 
 
 def is_scrimmage(p: dict) -> bool:
-    return p["play_type"] in ("pass", "run") and inum(p["down"]) is not None and fnum(p["epa"]) is not None and p["two_point_attempt"] != "1"
+    return (
+        p["play_type"] in ("pass", "run")
+        and inum(p["down"]) is not None
+        and inum(p["ydstogo"]) is not None
+        and inum(p["yardline_100"]) is not None
+        and fnum(p["epa"]) is not None
+        and p["two_point_attempt"] != "1"
+    )
 
 
 def estimate_game(table, plays: list[dict]) -> list[tuple[dict, float]]:
@@ -271,7 +278,8 @@ def top_plays(plays: list[dict], home: str, key: str, n: int = 5) -> list[dict]:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--season", type=int, default=2026)
-    ap.add_argument("--ep-seasons", default="2023,2024,2025,2026")
+    # Past seasons only: the calibration on this season's games then measures the table on games it never saw.
+    ap.add_argument("--ep-seasons", default="2022,2023,2024,2025")
     ap.add_argument("--out", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "public", "data"))
     ap.add_argument("--max-age-h", type=float, default=6.0, help="re-download cached files older than this")
     a = ap.parse_args()

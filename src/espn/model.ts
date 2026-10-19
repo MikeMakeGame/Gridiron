@@ -291,10 +291,13 @@ export function buildGame(s: EspnSummary, opts: BuildOptions = {}): Game {
       const endTeamId = p.end.team?.id ?? offenseId;
       const yards = p.statYardage ?? 0;
       const noPlay = isNoPlay(p);
-      const homeScore = p.homeScore ?? prevHome;
-      const awayScore = p.awayScore ?? prevAway;
-      const offPts = (offenseId === home.id ? homeScore - prevHome : awayScore - prevAway);
-      const defPts = (offenseId === home.id ? awayScore - prevAway : homeScore - prevHome);
+      // ESPN sometimes dips a score for one row and restores it on the next. Scores never go down in a game,
+      // and only a flagged scoring play earns the points, so a dip can't fake a defensive touchdown.
+      const homeScore = Math.max(prevHome, p.homeScore ?? prevHome);
+      const awayScore = Math.max(prevAway, p.awayScore ?? prevAway);
+      const flagged = !!p.scoringPlay;
+      const offPts = flagged ? (offenseId === home.id ? homeScore - prevHome : awayScore - prevAway) : 0;
+      const defPts = flagged ? (offenseId === home.id ? awayScore - prevAway : homeScore - prevHome) : 0;
       const scrimmage = (kind === 'pass' || kind === 'rush') && !noPlay && down > 0;
       // ESPN's flag misses some fumbles; a 4th-down possession change is a turnover on downs, not a giveaway.
       const turnover = !!p.isTurnover || (scrimmage && down !== 4 && endTeamId !== offenseId && offPts <= 0);
@@ -324,7 +327,7 @@ export function buildGame(s: EspnSummary, opts: BuildOptions = {}): Game {
         endDown: p.end.down ?? 0,
         endDistance: p.end.distance ?? 0,
         yards,
-        scoring: !!p.scoringPlay || offPts > 0 || defPts > 0,
+        scoring: flagged,
         turnover,
         penalty: !!p.isPenalty || kind === 'penalty',
         noPlay,
@@ -395,7 +398,10 @@ export function buildGame(s: EspnSummary, opts: BuildOptions = {}): Game {
     wpPoints,
     regulationSec,
     otLen,
-    situation: state === 'in' ? situationOf(truncated ? undefined : s.situation ?? opts.scoreboardSituation, lastPlay, home, away) : null,
+    situation:
+      state === 'in' && status.type.name !== 'STATUS_HALFTIME'
+        ? situationOf(truncated ? undefined : s.situation ?? opts.scoreboardSituation, lastPlay, home, away)
+        : null,
     lastPlay,
     box: s.boxscore,
     odds: s.pickcenter?.[0]?.details ?? comp.odds?.[0]?.details ?? '',
@@ -444,7 +450,8 @@ function situationOf(sit: EspnSituation | undefined, last: Play | null, home: Te
       awayTimeouts: sit.awayTimeouts ?? null,
     };
   }
-  if (!last) return null;
+  // Without ESPN's situation block: after a score or a kickoff-less end of drive there is no snap to describe.
+  if (!last || last.scoring) return null;
   const pos = last.endTeamId;
   const dd = downDistance(last.endDown, last.endDistance, last.endYtg);
   return {

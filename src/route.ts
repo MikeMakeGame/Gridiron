@@ -22,10 +22,14 @@ export function go(gameId: string | null): void {
   listeners.forEach((f) => f());
 }
 
-window.addEventListener('popstate', () => {
-  current = parse(location.hash);
+const sync = () => {
+  const next = parse(location.hash);
+  if (next === current) return;
+  current = next;
   listeners.forEach((f) => f());
-});
+};
+window.addEventListener('popstate', sync);
+window.addEventListener('hashchange', sync);
 
 export function useRoute(): string | null {
   const [, tick] = useState(0);

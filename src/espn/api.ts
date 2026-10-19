@@ -15,9 +15,13 @@ async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
 async function getOptional<T>(url: string): Promise<T | null> {
   try {
     const r = await fetch(url);
-    if (!r.ok) return null;
+    if (!r.ok) {
+      if (r.status !== 404) console.warn(`Gridiron: ${url} answered ${r.status}`);
+      return null;
+    }
     return (await r.json()) as T;
-  } catch {
+  } catch (e) {
+    console.warn(`Gridiron: couldn't load ${url}`, e);
     return null;
   }
 }

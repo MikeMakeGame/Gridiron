@@ -31,6 +31,10 @@ for (const f of files) {
   }
 }
 
+if (!rows.length) {
+  console.error('calibrate: no finished games matched; leaving calibration.json as it was');
+  process.exit(0);
+}
 const abs = rows.map((r) => Math.abs(r.err)).sort((a, b) => a - b);
 const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
 const out = {

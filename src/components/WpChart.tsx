@@ -38,7 +38,7 @@ export function WpChart({ g }: { g: Game }) {
         {w > 0 && (
           <svg width={w} height={H} viewBox={`0 0 ${w} ${H}`}>
             {Array.from({ length: quarters }, (_, i) => (
-              <rect class={`wp-q${i % 2 ? ' odd' : ''}`} x={x(i * 900)} y={0} width={x(Math.min(span, (i + 1) * 900)) - x(i * 900)} height={H} />
+              <rect key={i} class={`wp-q${i % 2 ? ' odd' : ''}`} x={x(i * 900)} y={0} width={x(Math.min(span, (i + 1) * 900)) - x(i * 900)} height={H} />
             ))}
             <line class="wp-mid" x1={0} x2={w} y1={y(0.5)} y2={y(0.5)} />
             {d && <path class="wp-line" d={d} />}

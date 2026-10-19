@@ -35,6 +35,7 @@ export function usePoll<T>(
   const fails = useRef(0);
   const delay = useRef<number | null>(null);
   const lastOkRef = useRef<number | null>(null);
+  const lastTry = useRef<number | null>(null);
   const run = useRef<() => void>(() => {});
 
   // Fresh refs every render so the scheduler always calls the current fetcher.
@@ -56,6 +57,7 @@ export function usePoll<T>(
 
   run.current = async () => {
     if (inflight.current) return;
+    lastTry.current = Date.now();
     const ac = new AbortController();
     inflight.current = ac;
     try {
@@ -82,6 +84,7 @@ export function usePoll<T>(
     setError(null);
     setLastOk(null);
     lastOkRef.current = null;
+    lastTry.current = null;
     fails.current = 0;
     run.current();
     const onVis = () => {
@@ -91,10 +94,11 @@ export function usePoll<T>(
         return;
       }
       // Back from the background: fetch now if a poll was due, else resume the schedule.
-      const due = delay.current;
-      const age = lastOkRef.current ? Date.now() - lastOkRef.current : Infinity;
+      // Measured from the last attempt, so a run of errors keeps its backoff across tab switches.
+      const due = delay.current == null ? null : delay.current * (saveData() ? 4 : 1);
+      const age = lastTry.current ? Date.now() - lastTry.current : Infinity;
       if (due != null && age >= due) run.current();
-      else if (due != null) schedule(due - age);
+      else if (due != null) schedule((due - age) / (saveData() ? 4 : 1));
     };
     document.addEventListener('visibilitychange', onVis);
     return () => {

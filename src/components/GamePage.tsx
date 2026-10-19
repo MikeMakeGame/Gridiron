@@ -21,7 +21,10 @@ function nextIn(s: EspnSummary): number | null {
   if (SNAPSHOT) return null;
   const st = s.header.competitions[0].status.type;
   if (st.state === 'post') return null;
-  if (st.state === 'pre') return 60_000;
+  if (st.state === 'pre') {
+    const toKick = new Date(s.header.competitions[0].date).getTime() - Date.now();
+    return toKick < 30 * 60_000 ? 60_000 : 300_000;
+  }
   if (st.name === 'STATUS_HALFTIME' || st.name === 'STATUS_END_PERIOD') return 30_000;
   return 15_000;
 }
@@ -198,7 +201,7 @@ function TeamCell({ t, poss, tos }: { t: TeamInfo; poss: boolean; tos: number | 
       {tos != null && (
         <span class="tos" aria-label={`${tos} timeouts left`}>
           {[0, 1, 2].map((i) => (
-            <span class={`to${i >= tos ? ' used' : ''}`} />
+            <span key={i} class={`to${i >= tos ? ' used' : ''}`} />
           ))}
         </span>
       )}
