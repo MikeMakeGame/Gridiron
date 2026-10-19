@@ -102,6 +102,7 @@ export interface Game {
   odds: string;
   truncated: boolean; // a replay cut; the box score is still the final one
   seasonType: number;
+  kickoff: string; // ISO date
 }
 
 const ADMIN = /^(official timeout|timeout|two-minute warning|end period|end of half|end of game|end of regulation|coin toss)$/i;
@@ -375,7 +376,10 @@ export function buildGame(s: EspnSummary, opts: BuildOptions = {}): Game {
   const status = comp.status;
   let state = status.type.state;
   let period = status.period ?? lastPlay?.period ?? 0;
-  let clockText = clockLabel(status.type.name, period, status.displayClock, status.type.shortDetail);
+  let clockText =
+    status.type.state === 'pre'
+      ? new Date(comp.date).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })
+      : clockLabel(status.type.name, period, status.displayClock, status.type.shortDetail);
   if (truncated && lastPlay) {
     state = 'in';
     period = lastPlay.period;
@@ -407,6 +411,7 @@ export function buildGame(s: EspnSummary, opts: BuildOptions = {}): Game {
     odds: s.pickcenter?.[0]?.details ?? comp.odds?.[0]?.details ?? '',
     truncated,
     seasonType,
+    kickoff: comp.date,
   };
 }
 

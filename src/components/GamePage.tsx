@@ -181,7 +181,7 @@ export function GamePage({ id }: { id: string }) {
       </section>
 
       <Footer />
-      <JumpBar />
+      <JumpBar ids={['now', ...(g.plays.length ? ['numbers'] : []), 'drives', 'players']} />
     </div>
   );
 }
@@ -250,10 +250,11 @@ const JUMPS: [string, string][] = [
   ['players', 'Players'],
 ];
 
-function JumpBar() {
+function JumpBar({ ids }: { ids: string[] }) {
   const [active, setActive] = useState('now');
+  const jumps = JUMPS.filter(([id]) => ids.includes(id));
   useEffect(() => {
-    const els = JUMPS.map(([id]) => document.getElementById(id)).filter((e): e is HTMLElement => !!e);
+    const els = jumps.map(([id]) => document.getElementById(id)).filter((e): e is HTMLElement => !!e);
     const io = new IntersectionObserver(
       (es) => {
         const vis = es.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);

@@ -44,6 +44,9 @@ for (;;) {
     };
     appendFileSync(LOG, JSON.stringify(line) + '\n');
     if (st.type.state === 'post') break;
+    // Before kickoff, sleep until 10 minutes out instead of polling.
+    const toKick = new Date(s.header.competitions[0].date).getTime() - Date.now() - 10 * 60_000;
+    if (st.type.state === 'pre' && toKick > 0) await new Promise((r) => setTimeout(r, toKick));
   } catch (e) {
     appendFileSync(LOG, JSON.stringify({ ...line, error: String(e) }) + '\n');
   }

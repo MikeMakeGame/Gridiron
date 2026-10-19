@@ -162,13 +162,11 @@ img { display: block; }
 .clock { font-weight: 700; font-size: 22px; letter-spacing: .06em; text-transform: uppercase; line-height: 1; white-space: nowrap; }
 
 /* sections ----------------------------------------------------------------- */
-.view-game { counter-reset: sec; }
-.section { padding: 26px var(--pad) 8px; scroll-margin-top: 80px; counter-increment: sec; }
+.section { padding: 26px var(--pad) 8px; scroll-margin-top: 80px; }
 .section-title {
   display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
   font: 700 13px/1 var(--disp); letter-spacing: .2em; text-transform: uppercase; color: var(--tx2);
 }
-.section-title::before { content: counter(sec, decimal-leading-zero); color: var(--tx3); letter-spacing: .08em; }
 .section-title::after { content: ""; flex: 1; height: 1px; background: var(--line2); }
 
 /* now: situation, last play, WP, current drive ------------------------------ */
