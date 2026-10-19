@@ -1,7 +1,8 @@
 // One game, one scroll: score bar, now, drives, numbers, players, post-game model numbers.
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { getEpTable, getSummary, SNAPSHOT } from '../espn/api';
-import { buildGame, type Game, type TeamInfo } from '../espn/model';
+import { buildGame, periodLabel, type Game, type TeamInfo } from '../espn/model';
+import { biggestPlays } from '../stats/live';
 import type { EspnSummary } from '../espn/types';
 import type { EpTable } from '../stats/ep';
 import { smallLogo, teamVars } from '../format';
@@ -12,7 +13,7 @@ import { Drives } from './Drives';
 import { Numbers } from './Numbers';
 import { Players } from './Players';
 import { Advanced } from './Advanced';
-import { Epa, WpDelta } from './Badges';
+import { Epa, offenseAbbr, WpDelta } from './Badges';
 import { Footer } from './Scoreboard';
 
 function nextIn(s: EspnSummary): number | null {
@@ -79,6 +80,8 @@ export function GamePage({ id }: { id: string }) {
   const canReplay = full?.state === 'post' && full.plays.length > 0;
   const poss = g.situation?.possessionId;
   const lastSnap = [...g.plays].reverse().find((p) => p.kind !== 'kick' || g.plays.length < 3) ?? g.lastPlay;
+  const pivot = g.state === 'post' && !g.truncated ? biggestPlays(g, 1)[0] ?? null : null;
+  const headline = pivot ?? lastSnap;
   const curDrive = g.drives.find((d) => d.isLive) ?? null;
 
   return (
@@ -137,13 +140,15 @@ export function GamePage({ id }: { id: string }) {
             {g.situation.redZone && <span class="sit-extra">Red zone</span>}
           </div>
         )}
-        {lastSnap && (
+        {headline && (
           <div class="lastplay">
-            <div class="lp-label">{live ? 'Last play' : 'Final play'}</div>
-            <div class="lp-text">{lastSnap.text}</div>
+            <div class="lp-label">
+              {pivot ? `Play of the game · ${periodLabel(pivot.period)} ${pivot.clock}` : live ? 'Last play' : 'Final play'}
+            </div>
+            <div class="lp-text">{headline.text}</div>
             <div class="play-badges">
-              <WpDelta g={g} p={lastSnap} />
-              <Epa v={lastSnap.epa} />
+              <WpDelta g={g} p={headline} />
+              <Epa v={headline.epa} team={offenseAbbr(g, headline)} />
             </div>
           </div>
         )}

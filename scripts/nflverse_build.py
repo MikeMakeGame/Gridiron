@@ -324,7 +324,6 @@ def main() -> int:
             "qbs": qb_rows(plays, home),
             "top_epa": top_plays(plays, home, "epa"),
             "top_wpa": top_plays(plays, home, "wpa"),
-            "est_check": {"home_est": r3(est_team.get(home)), "away_est": r3(est_team.get(away))},
         }
         with open(os.path.join(games_dir, f"{espn}.json"), "w", encoding="utf-8") as f:
             json.dump(doc, f, separators=(",", ":"))

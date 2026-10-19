@@ -3,7 +3,7 @@ import { useState } from 'preact/hooks';
 import type { Drive, Game, Play } from '../espn/model';
 import { periodLabel } from '../espn/model';
 import { teamVars } from '../format';
-import { Epa, WpDelta } from './Badges';
+import { Epa, offenseAbbr, WpDelta } from './Badges';
 
 export function Drives({ g, fresh }: { g: Game; fresh: Set<string> }) {
   const [open, setOpen] = useState<Set<string>>(new Set());
@@ -81,7 +81,7 @@ export function PlayRow({ g, p, isNew }: { g: Game; p: Play; isNew?: boolean }) 
       <div class="play-text">{p.text}</div>
       <div class="play-badges">
         <WpDelta g={g} p={p} />
-        <Epa v={p.epa} />
+        <Epa v={p.epa} team={offenseAbbr(g, p)} />
       </div>
     </div>
   );

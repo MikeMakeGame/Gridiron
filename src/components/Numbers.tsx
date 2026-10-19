@@ -1,5 +1,7 @@
 // The live numbers grid: the stats that say how a team is actually playing, not just yards.
 import type { ComponentChildren } from 'preact';
+import { useEffect, useState } from 'preact/hooks';
+import { getCalibration, type Calibration } from '../espn/api';
 import type { Game } from '../espn/model';
 import { teamNumbers, type TeamNumbers } from '../stats/live';
 import { num, pct, signed, teamVars, yardText } from '../format';
@@ -16,6 +18,10 @@ interface Row {
 }
 
 export function Numbers({ g, epReady }: { g: Game; epReady: boolean }) {
+  const [cal, setCal] = useState<Calibration | null>(null);
+  useEffect(() => {
+    if (epReady) getCalibration().then(setCal);
+  }, [epReady]);
   const A = teamNumbers(g, g.away);
   const H = teamNumbers(g, g.home);
   const rows: Row[] = [
@@ -74,6 +80,7 @@ export function Numbers({ g, epReady }: { g: Game; epReady: boolean }) {
         Scrimmage plays only ({A.plays} {g.away.abbr}, {H.plays} {g.home.abbr}). Success: 40% of the distance on 1st down, 60% on 2nd, all of it on 3rd/4th.
         Explosive: run 10+ or pass 20+. Early downs skip the last 2 minutes of each half.
         {epReady && ' EPA est. = expected points after the snap minus before, from a table baked from nflverse.'}
+        {cal && ` Checked against nflverse's final numbers on ${cal.games} games this season: off by ${cal.mae.toFixed(2)} per play on average, 90% within ${cal.p90.toFixed(2)}.`}
       </p>
     </div>
   );

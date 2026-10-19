@@ -9,10 +9,12 @@ export function teamVars(t: Pick<TeamInfo, 'color' | 'color2'>): Record<string, 
   return { '--tc': t.color, '--tc2': t.color2 };
 }
 
-// ESPN's image combiner serves a small logo instead of the 500px PNG.
+// ESPN's image combiner serves a small logo instead of the 500px PNG; the snapshot bundles its own copies.
 export function smallLogo(url: string, px = 64): string {
   const m = url.match(/^https:\/\/a\.espncdn\.com(\/i\/teamlogos\/.+\.png)$/);
-  return m ? `https://a.espncdn.com/combiner/i?img=${m[1]}&w=${px}&h=${px}` : url;
+  if (!m) return url;
+  if (import.meta.env.MODE === 'snapshot') return `./logos/${m[1].split('/').pop()}`;
+  return `https://a.espncdn.com/combiner/i?img=${m[1]}&w=${px}&h=${px}`;
 }
 
 export function yardText(pos: number): string {

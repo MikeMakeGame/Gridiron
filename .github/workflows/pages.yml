@@ -1,0 +1,58 @@
+# Builds the site and the nightly nflverse numbers, then publishes to GitHub Pages.
+# Live data is fetched by each visitor's browser straight from ESPN; nothing here calls ESPN except the calibration step.
+name: pages
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '30 11 * * *' # 4:30 AM Pacific: nflverse posts the night's games by then
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cache finished-game ESPN summaries
+        uses: actions/cache@v4
+        with:
+          path: .cache/espn
+          key: espn-${{ github.run_id }}
+          restore-keys: espn-
+      - run: npm ci
+      - name: nflverse numbers (EP table + per-game advanced)
+        run: python -X utf8 -I scripts/nflverse_build.py
+      - name: Check the live EPA estimate against nflverse
+        run: npx tsx scripts/calibrate.ts
+        continue-on-error: true
+      - run: npm run build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

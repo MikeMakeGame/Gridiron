@@ -5,6 +5,8 @@ import preact from '@preact/preset-vite';
 export default defineConfig(({ mode }) => ({
   base: './',
   plugins: [preact()],
+  publicDir: mode === 'snapshot' ? 'snapshot-public' : 'public',
+  define: { __BUILD_TIME__: JSON.stringify(new Date().toISOString()) },
   server: { port: 5191, strictPort: true, host: '127.0.0.1' },
   preview: { port: 5192, strictPort: true, host: '127.0.0.1' },
   build: {

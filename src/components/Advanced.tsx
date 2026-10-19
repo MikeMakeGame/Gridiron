@@ -4,6 +4,7 @@ import { getAdvanced, type AdvancedGame, type AdvancedPlay, type AdvancedTeam } 
 import type { Game } from '../espn/model';
 import { periodLabel } from '../espn/model';
 import { num, pct, signed, teamVars } from '../format';
+import { teamNumbers } from '../stats/live';
 
 export function Advanced({ g }: { g: Game }) {
   const [adv, setAdv] = useState<AdvancedGame | null | undefined>(undefined);
@@ -28,6 +29,8 @@ export function Advanced({ g }: { g: Game }) {
 
   const A = adv.away;
   const H = adv.home;
+  const estA = teamNumbers(g, g.away).epaPerPlay;
+  const estH = teamNumbers(g, g.home).epaPerPlay;
   const rows: [string, (t: AdvancedTeam) => number | null, (x: number | null) => string, 'high' | 'low' | 'none'][] = [
     ['EPA / play', (t) => t.epa_play, (x) => signed(x, 2), 'high'],
     ['Pass EPA / dropback', (t) => t.pass_epa, (x) => signed(x, 2), 'high'],
@@ -102,10 +105,11 @@ export function Advanced({ g }: { g: Game }) {
       <TopPlays title="Biggest plays by win probability" plays={adv.top_wpa} g={g} metric="wpa" />
       <p class="nums-note">
         nflfastR model values via nflverse ({adv.source}), built {adv.built}. DB = dropbacks (passes, sacks, scrambles). CPOE = completion % over expected.
-        {adv.est_check && adv.est_check.home_est != null && (
+        {estA != null && estH != null && (
           <>
             {' '}
-            This page's live EPA estimate for this game: {g.away.abbr} {signed(adv.est_check.away_est, 2)}, {g.home.abbr} {signed(adv.est_check.home_est, 2)} per play.
+            Check on this page's live estimate: it said {g.away.abbr} {signed(estA, 2)}, {g.home.abbr} {signed(estH, 2)} EPA/play; nflverse says {signed(A.epa_play, 2)} and{' '}
+            {signed(H.epa_play, 2)}.
           </>
         )}
       </p>

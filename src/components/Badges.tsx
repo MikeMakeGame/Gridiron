@@ -13,12 +13,18 @@ export function WpDelta({ g, p, min = 0.005 }: { g: Game; p: Play; min?: number 
   );
 }
 
-export function Epa({ v, est = true }: { v: number | null; est?: boolean }) {
+// EPA is always the offense's, so the badge names the offense.
+export function Epa({ v, team, est = true }: { v: number | null; team?: string; est?: boolean }) {
   if (v == null) return null;
   const cls = v > 0.05 ? 'pos' : v < -0.05 ? 'neg' : '';
   return (
-    <span class={`epa ${cls}${est ? ' est' : ''}`} title={est ? 'Expected points added, estimated live' : 'Expected points added (nflverse)'}>
+    <span class={`epa ${cls}${est ? ' est' : ''}`} title={est ? 'Expected points added for the offense, estimated live' : 'Expected points added (nflverse)'}>
+      {team ? `${team} ` : ''}
       {signed(v, 1)} EPA
     </span>
   );
+}
+
+export function offenseAbbr(g: Game, p: Play): string {
+  return p.offenseId === g.home.id ? g.home.abbr : g.away.abbr;
 }

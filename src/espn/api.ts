@@ -43,9 +43,13 @@ export function getSummary(id: string, signal?: AbortSignal): Promise<EspnSummar
   return getJson<EspnSummary>(url, signal);
 }
 
+// Cached once it loads; a miss is retried on the next call, so a late-arriving table still gets picked up.
 let epPromise: Promise<EpTable | null> | null = null;
 export function getEpTable(): Promise<EpTable | null> {
-  epPromise ??= getOptional<EpTable>('./data/ep_table.json');
+  epPromise ??= getOptional<EpTable>('./data/ep_table.json').then((t) => {
+    if (!t) epPromise = null;
+    return t;
+  });
   return epPromise;
 }
 
@@ -96,7 +100,25 @@ export interface AdvancedGame {
   qbs: AdvancedQb[];
   top_epa: AdvancedPlay[];
   top_wpa: AdvancedPlay[];
-  est_check?: { home_est: number | null; away_est: number | null };
+}
+
+export interface Calibration {
+  built: string;
+  games: number;
+  teamGames: number;
+  mae: number;
+  bias: number;
+  p90: number;
+  max: number;
+}
+
+let calPromise: Promise<Calibration | null> | null = null;
+export function getCalibration(): Promise<Calibration | null> {
+  calPromise ??= getOptional<Calibration>('./data/calibration.json').then((c) => {
+    if (!c) calPromise = null;
+    return c;
+  });
+  return calPromise;
 }
 
 export function getAdvanced(espnId: string): Promise<AdvancedGame | null> {

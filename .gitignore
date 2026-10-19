@@ -3,3 +3,5 @@ dist/
 dist-snapshot/
 .cache/
 *.log
+snapshot-public/
+public/data/
