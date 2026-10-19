@@ -239,9 +239,11 @@ export function buildGame(s: EspnSummary, opts: BuildOptions = {}): Game {
   const wpById = new Map<string, number>();
   for (const w of s.winprobability ?? []) wpById.set(w.playId, w.homeWinPercentage);
 
-  const rawDrives: (EspnDrive & { live?: boolean })[] = [...(s.drives?.previous ?? [])];
+  // The in-progress drive is the freshest copy; if ESPN also lists it under previous, the current one wins.
   const cur = s.drives?.current;
-  if (cur && !rawDrives.some((d) => d.id === cur.id)) rawDrives.push({ ...cur, live: true });
+  const rawDrives: (EspnDrive & { live?: boolean })[] = (s.drives?.previous ?? []).filter((d) => d.id !== cur?.id);
+  if (cur && comp.status.type.state === 'in') rawDrives.push({ ...cur, live: true });
+  else if (cur) rawDrives.push(cur);
 
   const plays: Play[] = [];
   const drives: Drive[] = [];

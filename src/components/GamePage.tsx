@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { getEpTable, getSummary, SNAPSHOT } from '../espn/api';
 import { buildGame, periodLabel, type Game, type TeamInfo } from '../espn/model';
-import { biggestPlays } from '../stats/live';
+import { biggestPlays, possessionsLeft } from '../stats/live';
 import type { EspnSummary } from '../espn/types';
 import type { EpTable } from '../stats/ep';
 import { smallLogo, teamVars } from '../format';
@@ -84,6 +84,7 @@ export function GamePage({ id }: { id: string }) {
   const pivot = g.state === 'post' && !g.truncated ? biggestPlays(g, 1)[0] ?? null : null;
   const headline = pivot ?? lastSnap;
   const curDrive = g.drives.find((d) => d.isLive) ?? null;
+  const possLeft = possessionsLeft(g);
 
   return (
     <div class="app view-game">
@@ -139,6 +140,7 @@ export function GamePage({ id }: { id: string }) {
           <div class={`situation${g.situation.redZone ? ' is-redzone' : ''}`}>
             <span class="sit-text">{g.situation.text}</span>
             {g.situation.redZone && <span class="sit-extra">Red zone</span>}
+            {possLeft != null && possLeft < 6 && <span class="sit-extra">≈{Math.max(1, Math.round(possLeft))} possessions left</span>}
           </div>
         )}
         {headline && (
