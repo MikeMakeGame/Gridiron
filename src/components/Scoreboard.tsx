@@ -6,6 +6,7 @@ import { clockLabel, teamInfo, type TeamInfo } from '../espn/model';
 import { kickoffText, smallLogo, teamVars } from '../format';
 import { usePoll } from '../hooks/usePoll';
 import { Fresh } from './Fresh';
+import { linkTo } from '../route';
 
 function nextIn(sb: EspnScoreboard): number | null {
   if (SNAPSHOT) return null;
@@ -91,7 +92,7 @@ function GameCard({ e }: { e: EspnEvent }) {
   const meta = [c.broadcasts?.[0]?.names?.join('/'), c.odds?.[0]?.details].filter(Boolean).join(' · ');
 
   return (
-    <a class={`sb-game is-${st === 'in' ? 'live' : st === 'pre' ? 'pre' : 'final'}${close ? ' is-close' : ''}`} href={`#/g/${e.id}`}>
+    <a class={`sb-game is-${st === 'in' ? 'live' : st === 'pre' ? 'pre' : 'final'}${close ? ' is-close' : ''}`} href={`#/g/${e.id}`} onClick={linkTo(e.id)}>
       <div class="sb-teams">
         <TeamRow t={away} st={st} poss={sit?.possession === away.id} winner={winner} />
         <TeamRow t={home} st={st} poss={sit?.possession === home.id} winner={winner} />

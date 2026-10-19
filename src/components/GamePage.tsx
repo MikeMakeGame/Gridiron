@@ -8,6 +8,7 @@ import type { EpTable } from '../stats/ep';
 import { smallLogo, teamVars } from '../format';
 import { usePoll } from '../hooks/usePoll';
 import { Fresh } from './Fresh';
+import { linkTo } from '../route';
 import { WpChart } from './WpChart';
 import { Drives } from './Drives';
 import { Numbers } from './Numbers';
@@ -67,7 +68,7 @@ export function GamePage({ id }: { id: string }) {
     return (
       <div class="app view-game">
         <header class="scorebar">
-          <a class="back" href="#/">
+          <a class="back" href="#/" onClick={linkTo(null)}>
             ‹
           </a>
         </header>
@@ -87,7 +88,7 @@ export function GamePage({ id }: { id: string }) {
   return (
     <div class="app view-game">
       <header class="scorebar">
-        <a class="back" href="#/" aria-label="All games">
+        <a class="back" href="#/" onClick={linkTo(null)} aria-label="All games">
           ‹
         </a>
         <TeamCell t={g.away} poss={poss === g.away.id} tos={g.situation?.awayTimeouts ?? null} />
