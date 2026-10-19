@@ -1,0 +1,22 @@
+{
+  "name": "gridiron",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "build:snapshot": "tsc --noEmit && vite build --mode snapshot",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "nflverse": "python -X utf8 -I scripts/nflverse_build.py"
+  },
+  "dependencies": {
+    "preact": "10.29.8"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "2.10.6",
+    "typescript": "5.9.3",
+    "vite": "8.3.1"
+  }
+}

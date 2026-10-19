@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Gridiron mock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&display=swap">
+<link rel="stylesheet" href="../src/styles.css">
+<style>
+  /* mock-only: view switch via #sb or #game */
+  body:not(.sb) .view-scoreboard{display:none}
+  body.sb .view-game, body.sb .jumpbar{display:none}
+  body.sb .view-scoreboard{display:block}
+</style>
+<script>if(location.hash==='#sb'||location.search==='?sb')document.addEventListener('DOMContentLoaded',()=>document.body.classList.add('sb'))</script>
+</head>
+<body>
+
+<!-- ============ SCOREBOARD ============ -->
+<div class="app view-scoreboard">
+  <header class="topbar">
+    <span class="brand">Gridiron</span>
+    <span class="week">Week 6</span>
+    <button class="fresh is-live">7s ago</button>
+  </header>
+
+  <main class="sb-list">
+    <h2 class="sb-group">Live</h2>
+
+    <a class="sb-game is-live is-close" href="#">
+      <div class="sb-team" style="--tc:#5A1414;--tc2:#FFB612">
+        <img class="logo" src="https://a.espncdn.com/i/teamlogos/nfl/500/wsh.png" alt="">
+        <span class="abbr">WSH</span><span class="rec">3-3</span>
+        <span class="score">20</span>
+      </div>
+      <div class="sb-team" style="--tc:#AA0000;--tc2:#B3995D">
+        <img class="logo" src="https://a.espncdn.com/i/teamlogos/nfl/500/sf.png" alt="">
+        <span class="abbr">SF</span><span class="rec">4-2</span><span class="poss"></span>
+        <span class="score">24</span>
+      </div>
+      <span class="sb-status">Q4 4:12</span>
+      <span class="sb-sit is-redzone">3rd &amp; 4 · WSH 8</span>
+      <div class="sb-wp">
+        <span class="sb-wp-away" style="width:31%;--tc:#5A1414"></span>
+        <span class="sb-wp-home" style="width:69%;--tc:#AA0000"></span>
+      </div>
+    </a>
+
+    <a class="sb-game is-live" href="#">
+      <div class="sb-team" style="--tc:#000000;--tc2:#A5ACAF">
+        <img class="logo" src="https://a.espncdn.com/i/teamlogos/nfl/500/lv.png" alt="">
+        <span class="abbr">LV</span><span class="rec">2-4</span>
+        <span class="score">10</span>
+      </div>
+      <div class="sb-team" style="--tc:#000000;--tc2:#FFB612">
+        <img class="logo" src="https://a.espncdn.com/i/teamlogos/nfl/500/pit.png" alt="">
+        <span class="abbr">PIT</span><span class="rec">4-1</span><span class="poss"></span>
+        <span class="score">17</span>
+      </div>
+      <span class="sb-status">Q2 0:48</span>
+      <span class="sb-sit">1st &amp; 10 · LV 35</span>
+      <div class="sb-wp">
+        <span class="sb-wp-away" style="width:22%;--tc:#000000"></span>
+        <span class="sb-wp-home" style="width:78%;--tc:#000000"></span>
+      </div>
+    </a>
+
+    <h2 class="sb-group">Final</h2>
+
+    <a class="sb-game is-final" href="#">
+      <div class="sb-team is-loser" style="--tc:#002244;--tc2:#B0B7BC">
+        <img class="logo" src="https://a.espncdn.com/i/teamlogos/nfl/500/dal.png" alt="">
+        <span class="abbr">DAL</span><span class="rec">2-3-1</span>
+        <span class="score">13</span>
+      </div>
+      <div class="sb-team is-winner" style="--tc:#204E32;--tc2:#FFB612">
+        <img class="logo" src="https://a.espncdn.com/i/teamlogos/nfl/500/gb.png" alt="">
+        <span class="abbr">GB</span><span class="rec">3-1-1</span>
+        <span class="score">23</span>
+      </div>
+      <span class="sb-status">Final</span>
+    </a>
+
+    <a class="sb-game is-final" href="#">
+      <div class="sb-team is-winner" style="--tc:#D3BC8D;--tc2:#101820">
+        <img class="logo" src="https://a.espncdn.com/i/teamlogos/nfl/500/no.png" alt="">
+        <span class="abbr">NO</span><span class="rec">1-5</span>
+        <span class="score">27</span>
+      </div>
+      <div class="sb-team is-loser" style="--tc:#A71930;--tc2:#000000">
+        <img class="logo" src="https://a.espncdn.com/i/teamlogos/nfl/500/ari.png" alt="">
+        <span class="abbr">ARI</span><span class="rec">2-4</span>
+        <span class="score">24</span>
+      </div>
+      <span class="sb-status">Final/OT</span>
+    </a>
+
+    <h2 class="sb-group">Upcoming</h2>
+
+    <a class="sb-game is-pre" href="#">
+      <div class="sb-team" style="--tc:#006778;--tc2:#000000">
+        <img class="logo" src="https://a.espncdn.com/i/teamlogos/nfl/500/jax.png" alt="">
+        <span class="abbr">JAX</span><span class="rec">4-2</span>
+      </div>
+      <div class="sb-team" style="--tc:#E31837;--tc2:#FFB81C">
+        <img class="logo" src="https://a.espncdn.com/i/teamlogos/nfl/500/kc.png" alt="">
+        <span class="abbr">KC</span><span class="rec">4-2</span>
+      </div>
+      <span class="sb-status">Mon 5:15 PM</span>
+      <span class="sb-meta">ESPN · KC -3.5</span>
+    </a>
+  </main>
+
+  <footer class="footer">Live data: ESPN (unofficial). Advanced: nflverse, CC-BY 4.0.</footer>
+</div>
+
+<!-- ============ GAME ============ -->
+<div class="app view-game">
+  <header class="scorebar">
+    <button class="back" aria-label="Scoreboard"></button>
+    <div class="sbar-team away" style="--tc:#002244;--tc2:#B0B7BC">
+      <img class="logo" src="https://a.espncdn.com/i/teamlogos/nfl/500/dal.png" alt="">
+      <span class="abbr">DAL</span>
+      <span class="tos"><i class="to"></i><i class="to used"></i><i class="to used"></i></span>
+      <span class="score">13</span>
+      <span class="poss"></span>
+    </div>
+    <div class="sbar-mid">
+      <span class="clock">Q4 6:12</span>
+      <button class="fresh is-live">7s ago</button>
+    </div>
+    <div class="sbar-team home" style="--tc:#204E32;--tc2:#FFB612">
+      <img class="logo" src="https://a.espncdn.com/i/teamlogos/nfl/500/gb.png" alt="">
+      <span class="abbr">GB</span>
+      <span class="tos"><i class="to"></i><i class="to"></i><i class="to used"></i></span>
+      <span class="score">23</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="section" id="now">
+      <h2 class="section-title">Now</h2>
+
+      <div class="situation is-redzone">3rd &amp; 7 · GB 41 <span class="sit-extra">2-min</span></div>
+
+      <div class="lastplay">
+        <span class="lp-label">Last play</span>
+        <p class="lp-text">Jordan Love sacked by Micah Parsons for -8 yards (3rd and 7 becomes 3rd and 15)</p>
+        <span class="wpd big" style="--tc:#002244">DAL −11.3%</span>
+      </div>
+
+      <svg class="wpchart" viewBox="0 0 360 96" role="img" aria-label="Win probability">
+        <rect class="wp-q" x="0" y="0" width="90" height="96"/>
+        <rect class="wp-q" x="90" y="0" width="90" height="96"/>
+        <rect class="wp-q" x="180" y="0" width="90" height="96"/>
+        <rect class="wp-q" x="270" y="0" width="90" height="96"/>
+        <line class="wp-mid" x1="0" y1="48" x2="360" y2="48"/>
+        <path class="wp-line" d="M0 48 L14 46 L28 50 L44 41 L58 30 L72 33 L88 44 L104 52 L118 60 L134 55 L150 47 L166 40 L182 36 L198 44 L214 31 L232 24 L248 28 L262 22 L278 26 L292 18 L308 22 L322 16 L336 24 L348 17"/>
+        <circle class="wp-now" cx="348" cy="17" r="3.5"/>
+        <text class="wp-label" x="4" y="12">GB</text>
+        <text class="wp-label" x="4" y="90">DAL</text>
+      </svg>
+
+      <div class="curdrive" style="--tc:#002244">
+        <div class="cd-track">
+          <div class="cd-bar" style="left:25%;width:34%;--tc:#002244"></div>
+          <i class="cd-tick" style="left:32%"></i><i class="cd-tick" style="left:38%"></i><i class="cd-tick" style="left:46%"></i><i class="cd-tick" style="left:51%"></i><i class="cd-tick" style="left:59%"></i>
+        </div>
+        <div class="cd-meta">5 plays · 34 yds · 2:41</div>
+      </div>
+    </section>
+
+    <section class="section" id="drives">
+      <h2 class="section-title">Drives</h2>
+      <div class="drives">
+        <div class="qrule">Q1 · 0-0</div>
+
+        <button class="drive" style="--tc:#002244">
+          <span class="drive-team">DAL <small>Q1</small></span>
+          <span class="drive-track"><span class="drive-bar" style="left:34%;width:19%"></span><i class="drive-cap cap-punt" style="left:53%"></i></span>
+          <span class="drive-res">PUNT</span><span class="drive-sub">6p 19y 3:47</span>
+        </button>
+
+        <button class="drive is-open" style="--tc:#204E32">
+          <span class="drive-team">GB <small>Q1</small></span>
+          <span class="drive-track"><span class="drive-bar" style="left:25%;width:75%"></span><i class="drive-cap cap-td" style="left:100%"></i></span>
+          <span class="drive-res">TD</span><span class="drive-sub">11p 75y 6:21</span>
+        </button>
+        <div class="drive-plays">
+          <div class="play">
+            <span class="play-dd">3rd &amp; 6 · DAL 38</span>
+            <span class="play-text">Jordan Love pass short right to Romeo Doubs for 14 yards to the DAL 24</span>
+            <span class="play-badges"><span class="wpd" style="--tc:#204E32">GB +3.8%</span><span class="epa pos">+1.4</span></span>
+          </div>
+          <div class="play is-penalty">
+            <span class="play-dd">1st &amp; 10 · DAL 24</span>
+            <span class="play-text">PENALTY on DAL, defensive holding, 5 yards, enforced at DAL 24</span>
+            <span class="play-badges"><span class="epa pos est">+0.4</span></span>
+          </div>
+          <div class="play is-score">
+            <span class="play-dd">2nd &amp; 4 · DAL 9</span>
+            <span class="play-text">Matthew Golden 9 Yd pass from Jordan Love (Trey Smack Kick)</span>
+            <span class="play-badges"><span class="wpd" style="--tc:#204E32">GB +6.2%</span><span class="epa pos">+3.9</span></span>
+          </div>
+        </div>
+
+        <button class="drive" style="--tc:#002244">
+          <span class="drive-team">DAL <small>Q1</small></span>
+          <span class="drive-track"><span class="drive-bar" style="left:22%;width:19%"></span><i class="drive-cap cap-to" style="left:41%"></i></span>
+          <span class="drive-res">INT</span><span class="drive-sub">4p 19y 1:58</span>
+        </button>
+
+        <div class="qrule">Q2 · 7-0</div>
+
+        <button class="drive" style="--tc:#204E32">
+          <span class="drive-team">GB <small>Q2</small></span>
+          <span class="drive-track"><span class="drive-bar" style="left:41%;width:21%"></span><i class="drive-cap cap-miss" style="left:62%"></i></span>
+          <span class="drive-res">MISS</span><span class="drive-sub">7p 21y 3:30</span>
+        </button>
+        <button class="drive" style="--tc:#002244">
+          <span class="drive-team">DAL <small>Q2</small></span>
+          <span class="drive-track"><span class="drive-bar" style="left:18%;width:62%"></span><i class="drive-cap cap-fg" style="left:80%"></i></span>
+          <span class="drive-res">FG</span><span class="drive-sub">12p 62y 5:44</span>
+        </button>
+        <button class="drive" style="--tc:#204E32">
+          <span class="drive-team">GB <small>Q2</small></span>
+          <span class="drive-track"><span class="drive-bar" style="left:30%;width:44%"></span><i class="drive-cap cap-fg" style="left:74%"></i></span>
+          <span class="drive-res">FG</span><span class="drive-sub">9p 44y 4:12</span>
+        </button>
+        <button class="drive" style="--tc:#002244">
+          <span class="drive-team">DAL <small>Q2</small></span>
+          <span class="drive-track"><span class="drive-bar" style="left:25%;width:11%"></span><i class="drive-cap cap-half" style="left:36%"></i></span>
+          <span class="drive-res">HALF</span><span class="drive-sub">3p 11y 0:34</span>
+        </button>
+
+        <div class="qrule">Q3 · 10-3</div>
+
+        <button class="drive" style="--tc:#204E32">
+          <span class="drive-team">GB <small>Q3</small></span>
+          <span class="drive-track"><span class="drive-bar" style="left:20%;width:80%"></span><i class="drive-cap cap-td" style="left:100%"></i></span>
+          <span class="drive-res">TD</span><span class="drive-sub">10p 80y 5:03</span>
+        </button>
+        <button class="drive" style="--tc:#002244">
+          <span class="drive-team">DAL <small>Q3</small></span>
+          <span class="drive-track"><span class="drive-bar" style="left:27%;width:49%"></span><i class="drive-cap cap-downs" style="left:76%"></i></span>
+          <span class="drive-res">DOWNS</span><span class="drive-sub">8p 49y 4:21</span>
+        </button>
+
+        <div class="qrule">Q4 · 17-6</div>
+
+        <button class="drive" style="--tc:#204E32">
+          <span class="drive-team">GB <small>Q4</small></span>
+          <span class="drive-track"><span class="drive-bar" style="left:29%;width:42%"></span><i class="drive-cap cap-fg" style="left:71%"></i></span>
+          <span class="drive-res">FG</span><span class="drive-sub">8p 42y 3:48</span>
+        </button>
+        <button class="drive" style="--tc:#002244">
+          <span class="drive-team">DAL <small>Q4</small></span>
+          <span class="drive-track"><span class="drive-bar" style="left:20%;width:80%"></span><i class="drive-cap cap-td" style="left:100%"></i></span>
+          <span class="drive-res">TD</span><span class="drive-sub">11p 80y 4:50</span>
+        </button>
+        <button class="drive is-live" style="--tc:#002244">
+          <span class="drive-team">DAL <small>Q4</small></span>
+          <span class="drive-track"><span class="drive-bar" style="left:25%;width:34%"></span><i class="drive-cap cap-live" style="left:59%"></i></span>
+          <span class="drive-res">LIVE</span><span class="drive-sub">5p 34y 2:41</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="section" id="numbers">
+      <h2 class="section-title">Numbers</h2>
+      <div class="nums">
+        <div class="nums-head">
+          <span style="--tc:#002244">DAL</span><span style="--tc:#204E32">GB</span>
+        </div>
+        <div class="nums-row"><span class="k">Total yards</span><span class="v away">303</span><span class="v home better">361</span></div>
+        <div class="nums-row"><span class="k">Yards / play</span><span class="v away">4.3</span><span class="v home better">5.6</span></div>
+        <div class="nums-row"><span class="k">3rd down</span><span class="v away">5-13</span><span class="v home better">6-12</span></div>
+        <div class="nums-row"><span class="k">Turnovers</span><span class="v away">2</span><span class="v home better">0</span></div>
+        <div class="nums-row"><span class="k">Success rate <span class="tag-model">nflverse</span></span><span class="v away">41%</span><span class="v home better">52%</span></div>
+        <div class="nums-row"><span class="k">EPA / play <span class="tag-est">est.</span></span><span class="v away">−0.12</span><span class="v home better">+0.18</span></div>
+        <div class="nums-row"><span class="k">Explosive plays</span><span class="v away better">6</span><span class="v home">4</span></div>
+        <div class="nums-row"><span class="k">Early-down pass rate</span><span class="v away better">64%</span><span class="v home">47%</span></div>
+        <p class="nums-note">Estimated figures are computed from live play-by-play and settle after nflverse posts the final.</p>
+      </div>
+    </section>
+
+    <section class="section" id="players">
+      <h2 class="section-title">Players</h2>
+      <div class="players">
+        <div class="pl-team" style="--tc:#002244">
+          <table class="pl-table">
+            <caption>DAL · Passing</caption>
+            <thead><tr><th>Player</th><th>C/ATT</th><th>YDS</th><th>TD</th><th>INT</th><th>QBR</th></tr></thead>
+            <tbody><tr><td class="pl-name">Dak Prescott</td><td>34/54</td><td>258</td><td>1</td><td>2</td><td>60.6</td></tr></tbody>
+          </table>
+          <table class="pl-table">
+            <caption>DAL · Receiving</caption>
+            <thead><tr><th>Player</th><th>REC</th><th>YDS</th><th>TGTS</th></tr></thead>
+            <tbody><tr><td class="pl-name">George Pickens</td><td>6</td><td>73</td><td>11</td></tr></tbody>
+          </table>
+          <table class="pl-table">
+            <caption>DAL · Rushing</caption>
+            <thead><tr><th>Player</th><th>CAR</th><th>YDS</th><th>TD</th></tr></thead>
+            <tbody><tr><td class="pl-name">Javonte Williams</td><td>11</td><td>41</td><td>1</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">Live data: ESPN (unofficial). Advanced: nflverse, CC-BY 4.0.</footer>
+
+  <nav class="jumpbar">
+    <button class="jump is-active">Now</button><button class="jump">Drives</button><button class="jump">Numbers</button><button class="jump">Players</button>
+  </nav>
+</div>
+</body>
+</html>

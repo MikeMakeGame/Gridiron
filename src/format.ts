@@ -1,0 +1,34 @@
+import type { TeamInfo } from './espn/model';
+
+export const pct = (x: number | null | undefined, digits = 0) => (x == null ? '–' : `${(x * 100).toFixed(digits)}%`);
+export const num = (x: number | null | undefined, digits = 1) => (x == null ? '–' : x.toFixed(digits));
+export const signed = (x: number | null | undefined, digits = 2) =>
+  x == null ? '–' : `${x > 0 ? '+' : x < 0 ? '−' : ''}${Math.abs(x).toFixed(digits)}`;
+
+export function teamVars(t: Pick<TeamInfo, 'color' | 'color2'>): Record<string, string> {
+  return { '--tc': t.color, '--tc2': t.color2 };
+}
+
+// ESPN's image combiner serves a small logo instead of the 500px PNG.
+export function smallLogo(url: string, px = 64): string {
+  const m = url.match(/^https:\/\/a\.espncdn\.com(\/i\/teamlogos\/.+\.png)$/);
+  return m ? `https://a.espncdn.com/combiner/i?img=${m[1]}&w=${px}&h=${px}` : url;
+}
+
+export function yardText(pos: number): string {
+  const p = Math.round(pos);
+  if (p === 50) return 'the 50';
+  return p < 50 ? `own ${p}` : `opp ${100 - p}`;
+}
+
+export function kickoffText(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+}
+
+export function agoText(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  return m < 60 ? `${m}m ago` : `${Math.floor(m / 60)}h ago`;
+}
