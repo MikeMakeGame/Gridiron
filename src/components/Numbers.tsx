@@ -80,10 +80,15 @@ export function Numbers({ g, epReady }: { g: Game; epReady: boolean }) {
         Scrimmage plays only ({A.plays} {g.away.abbr}, {H.plays} {g.home.abbr}). Success: 40% of the distance on 1st down, 60% on 2nd, all of it on 3rd/4th.
         Explosive: run 10+ or pass 20+. Early downs skip the last 2 minutes of each half.
         {epReady && ' EPA est. = expected points after the snap minus before, from a table baked from nflverse.'}
-        {cal && ` Checked against nflverse's final numbers on ${cal.games} games this season: off by ${cal.mae.toFixed(2)} per play on average, 90% within ${cal.p90.toFixed(2)}.`}
+        {cal && ` Checked on ${cal.games} games this season: a team's EPA/play here lands within ${cal.mae.toFixed(2)} of nflverse's on average by the final${halftime(cal)}.`}
       </p>
     </div>
   );
+}
+
+function halftime(c: Calibration): string {
+  const h = c.byCut?.find((x) => x.cut === 'Q2');
+  return h ? `, ${h.mae.toFixed(2)} at halftime` : '';
 }
 
 function row(k: ComponentChildren, A: TeamNumbers, H: TeamNumbers, f: (t: TeamNumbers) => number | null, fmt: (x: number | null) => string, better: Better): Row {

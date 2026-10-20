@@ -114,6 +114,7 @@ export interface Calibration {
   bias: number;
   p90: number;
   max: number;
+  byCut?: { cut: string; teamGames: number; mae: number; p90: number; bias: number; baselineMae: number }[];
 }
 
 let calPromise: Promise<Calibration | null> | null = null;

@@ -48,7 +48,8 @@ export function WpChart({ g }: { g: Game }) {
               <text
                 class="wp-now-label"
                 x={Math.min(x(last.gameSec) + 8, w - 4)}
-                y={Math.min(H - 6, Math.max(14, y(last.wpHome!) + 4))}
+                // Off the line: below it when the line runs high, above it when it runs low.
+                y={y(last.wpHome!) < H / 2 ? Math.min(H - 6, y(last.wpHome!) + 18) : Math.max(14, y(last.wpHome!) - 8)}
                 text-anchor={x(last.gameSec) + 70 > w ? 'end' : 'start'}
                 style={teamVars(last.wpHome! >= 0.5 ? g.home : g.away)}
               >
