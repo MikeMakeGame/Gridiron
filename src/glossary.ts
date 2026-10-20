@@ -1,0 +1,25 @@
+// One plain sentence per stat name, shown where the name appears (tap on a phone, hover on a desktop).
+export const GLOSSARY: Record<string, string> = {
+  'Success rate': 'Share of plays that gained enough: 40% of the yards needed on 1st down, 60% on 2nd, all of them on 3rd or 4th.',
+  'EPA / play':
+    'Expected points added per play: how much each snap moved the points a team can expect from that drive. Above zero is good. Estimated live here; nflverse publishes its own the morning after.',
+  'Yards / play': 'Yards gained per run or pass.',
+  'Explosive plays': 'Runs of 10+ yards and passes of 20+.',
+  'Early-down pass rate': 'How often a team throws on 1st and 2nd down, leaving out the last two minutes of each half.',
+  'Avg 3rd-down distance': 'Yards to go on the average 3rd down. Shorter means the early downs worked.',
+  'Points / drive': 'Points scored per possession.',
+  'Turnovers (win % given away)': 'Giveaways, and how much of their own win probability they cost.',
+  'Avg drive start': 'Where drives began on average: field position.',
+  'Pass EPA / dropback': 'EPA on passes, sacks and scrambles, per dropback.',
+  'Rush EPA / carry': 'EPA on designed runs, per carry.',
+  'Success rate (EPA > 0)': "Share of plays with positive EPA: nflverse's version of success rate.",
+  'Early-down EPA': 'EPA per play on 1st and 2nd down.',
+  'Pass rate over expected': 'How much more (or less) a team threw than an average team would have in the same situations.',
+  'Explosive rate': 'Share of plays that were explosive (runs of 10+, passes of 20+).',
+  DB: 'Dropbacks: passes, sacks and scrambles.',
+  'EPA/DB': 'Expected points added per dropback.',
+  CPOE: 'Completion % over expected: completions above what an average quarterback would make on the same throws.',
+  aDOT: 'Average depth of target: how far past the line passes travel in the air.',
+  'YAC%': 'Share of passing yards gained after the catch.',
+  'Win probability': "ESPN's model of each team's chance to win, updated after every play.",
+};

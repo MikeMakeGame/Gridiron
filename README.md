@@ -1,6 +1,6 @@
 # Gridiron
 
-A phone-first live NFL viewer with no ads and no betting lines. One scroll per game: score, the situation, the last play and how much it swung win probability, a whole-game WP chart, the current drive, the numbers that say how each team is actually playing, a drive chart, then the box score.
+A phone-first live NFL viewer with no ads and no betting lines. Each game opens on the gist (the score, the situation, the last play and how much it swung win probability), with win probability, the numbers that say how each team is actually playing, the drive chart and the box score one tap down, each closed row carrying its own one-line answer.
 
 Live at https://mikemakegame.github.io/Gridiron/ (GitHub Pages; add it to your phone's home screen).
 
@@ -10,15 +10,17 @@ A personal, non-commercial project. Not affiliated with ESPN, the NFL or any tea
 
 - **Scoreboard**: every game of the week, live ones first, with down & distance and a win-probability bar. ESPN is polled only while a game is live (every 15 s; 30 s at halftime). Before kickoff, after the final, or in a week with nothing on, the page fetches once and then only when you tap the freshness pill. The arrows step through the regular season and on into the playoffs, using ESPN's own calendar; a browsed week stays in the link (`#/w/2026-3-1` is the Wild Card round) and survives opening a game.
 - **Game page**
-  - sticky score bar with a freshness pill ("7s ago": green under 30 s, amber past 45 s, red past 2 min; tap to refetch)
-  - situation, last play with its WP swing and its estimated EPA
-  - WP chart for the whole game; drag it to read any play
-  - current drive on a 100-yard strip
-  - **How they're playing**, live: success rate, EPA/play (est.), yards/play, explosive plays, early-down pass rate, 3rd-down distance, points/drive, turnovers and the win % they cost, average drive start
-  - drive chart: one row per drive, every drive attacking rightward, result glyph at the end; tap a row for its plays
-  - box score (passing, rushing, receiving; defense, kicking, returns behind one tap)
-  - after the game: nflverse model numbers (EPA pass/rush, success, CPOE, pass rate over expected, top plays by EPA and WPA)
-  - finished games can be replayed play by play "as if live"
+  - on top: the sticky score bar, the situation, and the last play (on a final, the play of the game) with its win-probability swing
+  - then closed rows, each with a one-line answer, remembered open or closed on your device:
+    - **Win probability**: a sparkline in the row, the whole-game chart inside; drag it to read any play
+    - **Numbers**, live: success rate, EPA/play (est.), yards/play, explosive plays, and five more behind "more"; after the game, nflverse's model numbers (EPA pass/rush, CPOE, pass rate over expected, top plays by EPA and WPA)
+    - **Drives**: one row per drive, every drive attacking rightward, the current drive on a 100-yard strip; tap a row for its plays
+    - **Players**: the box score (passing, rushing, receiving; defense, kicking, returns behind one tap)
+  - every stat name explains itself: tap it (or hover with a mouse) for one sentence
+  - a bottom dock where the thumb is: back to the week, and the game's one action (the freshness pill live or before kickoff: green under 30 s, amber past 45 s, red past 2 min, tap to refetch; Replay on a final)
+  - finished games can be replayed play by play "as if live", from the dock
+- **Looks**: Night (dark, the default) and Day (high contrast for sunlight), from the top bar or the "Look, data and credits" row; your system's light/dark setting picks one until you choose. Every team colour clears 4.5:1 contrast in both (`python scripts/team_contrast.py .cache/espn`).
+- **Keys**, where there's a keyboard: ← → change week, Esc back to the games, ← → step a replay.
 
 ## Live EPA, estimated, and how good the estimate is
 

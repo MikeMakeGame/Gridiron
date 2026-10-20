@@ -24,7 +24,10 @@ function LiveFresh({ live, lastOk, polling, error, retryAt, onRefresh }: Props) 
   const now = useNow(1000);
   const age = lastOk ? now - lastOk : Infinity;
   let cls = 'is-idle';
-  let text = lastOk ? agoText(age) : 'loading';
+  // Nothing polls while nothing is live, so a ticking counter would be noise: say when it was fetched, and that a
+  // tap fetches again.
+  let text = lastOk ? `↻ ${new Date(lastOk).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}` : 'loading';
+  if (live && polling) text = lastOk ? agoText(age) : 'loading';
   const wait = retryAt ? retryAt - now : 0;
   if (wait > 0) {
     const s = Math.ceil(wait / 1000);
@@ -38,7 +41,12 @@ function LiveFresh({ live, lastOk, polling, error, retryAt, onRefresh }: Props) 
     else if (age < 30_000) cls = 'is-live';
   }
   return (
-    <button class={`fresh ${cls}`} onClick={onRefresh} title={error ?? (lastOk ? new Date(lastOk).toLocaleTimeString() : '')}>
+    <button
+      class={`fresh ${cls}`}
+      onClick={onRefresh}
+      title={error ?? 'Tap to fetch again'}
+      aria-label={`${error ?? (lastOk ? `Updated ${new Date(lastOk).toLocaleTimeString()}` : 'Loading')}. Fetch again.`}
+    >
       {cls === 'is-live' && <span class="fresh-dot" aria-hidden="true" />}
       {text}
     </button>

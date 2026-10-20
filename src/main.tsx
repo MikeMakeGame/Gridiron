@@ -3,6 +3,7 @@ import { useErrorBoundary } from 'preact/hooks';
 import { Scoreboard } from './components/Scoreboard';
 import { GamePage } from './components/GamePage';
 import { go, setBoardWeek, useRoute } from './route';
+import './theme'; // sets the day/night look before the first paint
 import './styles.css';
 
 /** A rendering crash shows a way out instead of a blank page. */

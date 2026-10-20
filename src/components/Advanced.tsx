@@ -1,13 +1,18 @@
 // Post-game, from nflverse: the model numbers (EPA, CPOE, pass rate over expected) once the nightly file lands.
+// Sits at the bottom of the Numbers section (a one-line note until the file lands); every stat name explains itself.
 import { useEffect, useState } from 'preact/hooks';
 import { getAdvanced, type AdvancedGame, type AdvancedPlay, type AdvancedTeam } from '../espn/api';
 import type { Game } from '../espn/model';
 import { periodLabel } from '../espn/model';
 import { num, pct, signed, teamVars } from '../format';
-import { teamNumbers } from '../stats/live';
+import { Term, TipNote, useTips } from './Tip';
+
+const QB_COLS = ['DB', 'EPA/DB', 'CPOE', 'aDOT', 'YAC%'];
 
 export function Advanced({ g }: { g: Game }) {
   const [adv, setAdv] = useState<AdvancedGame | null | undefined>(undefined);
+  const [tip, toggleTip] = useTips();
+  const [qbTip, toggleQbTip] = useTips();
   useEffect(() => {
     let live = true;
     getAdvanced(g.id).then((a) => live && setAdv(a));
@@ -17,19 +22,10 @@ export function Advanced({ g }: { g: Game }) {
   }, [g.id]);
 
   if (adv === undefined) return null;
-  if (!adv) {
-    return (
-      <p class="empty">
-        nflverse's model numbers (EPA, CPOE, pass rate over expected) for this game arrive the morning after it; until then
-        the live estimate above stands in.
-      </p>
-    );
-  }
+  if (!adv) return <p class="sec-note">Model numbers (nflverse) are ready the morning after the game.</p>;
 
   const A = adv.away;
   const H = adv.home;
-  const estA = teamNumbers(g, g.away).epaPerPlay;
-  const estH = teamNumbers(g, g.home).epaPerPlay;
   const rows: [string, (t: AdvancedTeam) => number | null, (x: number | null) => string, 'high' | 'low' | 'none'][] = [
     ['EPA / play', (t) => t.epa_play, (x) => signed(x, 2), 'high'],
     ['Pass EPA / dropback', (t) => t.pass_epa, (x) => signed(x, 2), 'high'],
@@ -42,11 +38,10 @@ export function Advanced({ g }: { g: Game }) {
 
   return (
     <div class="adv">
+      <h3 class="sub-title">Model numbers · nflverse</h3>
       <div class="nums">
         <div class="nums-head">
-          <span class="k">
-            <span class="tag-model">nflverse</span>
-          </span>
+          <span class="k" />
           <span class="v away" style={teamVars(g.away)}>
             {g.away.abbr}
           </span>
@@ -60,13 +55,16 @@ export function Advanced({ g }: { g: Game }) {
           const win = better === 'none' || av == null || hv == null || av === hv ? null : (better === 'high') === av > hv ? 'a' : 'h';
           return (
             <div class="nums-row" key={k}>
-              <span class="k">{k}</span>
-              <span class={`v away${win === 'a' ? ' better' : ''}`} style={teamVars(g.away)}>
+              <span class="k">
+                <Term term={k} open={tip === k} onToggle={() => toggleTip(k)} />
+              </span>
+              <span class={`v away${win === 'h' ? ' worse' : ''}`} style={teamVars(g.away)}>
                 {fmt(av)}
               </span>
-              <span class={`v home${win === 'h' ? ' better' : ''}`} style={teamVars(g.home)}>
+              <span class={`v home${win === 'a' ? ' worse' : ''}`} style={teamVars(g.home)}>
                 {fmt(hv)}
               </span>
+              {tip === k && <TipNote term={k} class="in-grid" />}
             </div>
           );
         })}
@@ -78,11 +76,11 @@ export function Advanced({ g }: { g: Game }) {
           <thead>
             <tr>
               <th class="pl-name" scope="col" />
-              <th scope="col">DB</th>
-              <th scope="col">EPA/DB</th>
-              <th scope="col">CPOE</th>
-              <th scope="col">aDOT</th>
-              <th scope="col">YAC%</th>
+              {QB_COLS.map((c) => (
+                <th key={c} scope="col">
+                  <Term term={c} open={qbTip === c} onToggle={() => toggleQbTip(c)} />
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -99,19 +97,11 @@ export function Advanced({ g }: { g: Game }) {
           </tbody>
         </table>
       )}
+      <TipNote term={qbTip} />
 
       <TopPlays title="Biggest plays by EPA" plays={adv.top_epa} g={g} metric="epa" />
       <TopPlays title="Biggest plays by win probability" plays={adv.top_wpa} g={g} metric="wpa" />
-      <p class="nums-note">
-        nflfastR model values via nflverse ({adv.source}), built {adv.built}. DB = dropbacks (passes, sacks, scrambles). CPOE = completion % over expected.
-        {estA != null && estH != null && (
-          <>
-            {' '}
-            Check on this page's live estimate: it said {g.away.abbr} {signed(estA, 2)}, {g.home.abbr} {signed(estH, 2)} EPA/play; nflverse says {signed(A.epa_play, 2)} and{' '}
-            {signed(H.epa_play, 2)}.
-          </>
-        )}
-      </p>
+      <p class="sec-note">nflverse (nflfastR models), built {adv.built}.</p>
     </div>
   );
 }
