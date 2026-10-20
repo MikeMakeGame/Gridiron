@@ -14,7 +14,7 @@ interface Props {
 }
 
 export function Fresh(props: Props) {
-  // The artifact copy never refetches; say when it was frozen instead of counting up.
+  // The offline snapshot never refetches; say when it was frozen instead of counting up.
   if (SNAPSHOT) return <span class="fresh is-idle" title="A frozen copy; the live version polls ESPN">snapshot · {SNAP_TIME}</span>;
   return <LiveFresh {...props} />;
 }

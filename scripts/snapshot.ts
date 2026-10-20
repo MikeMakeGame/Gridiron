@@ -1,5 +1,5 @@
 // Freezes this week's games into snapshot-public/ so `vite build --mode snapshot` makes a self-contained copy
-// (the Claude artifact can't reach ESPN). Usage: npx tsx scripts/snapshot.ts [--week N]
+// for hosts that block network access. Usage: npx tsx scripts/snapshot.ts [--week N]
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { scoreboard, summary } from './espn-cache';
@@ -60,9 +60,9 @@ for (const f of ['ep_table.json', 'calibration.json']) {
   if (existsSync(p)) cpSync(p, join(OUT, 'data', f));
 }
 
-// Small logos, so the snapshot never reaches for ESPN's CDN.
-for (const [name, path] of logos) {
-  const r = await fetch(`https://a.espncdn.com/combiner/i?img=${path}&w=80&h=80`);
+// Small dark-background logos (as the live app uses), so the snapshot never reaches for ESPN's CDN.
+for (const name of logos.keys()) {
+  const r = await fetch(`https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500-dark/${name}&w=80&h=80`);
   if (r.ok) writeFileSync(join(OUT, 'logos', name), Buffer.from(await r.arrayBuffer()));
   await new Promise((res) => setTimeout(res, 150));
 }

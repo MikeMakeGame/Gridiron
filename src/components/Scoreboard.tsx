@@ -6,6 +6,7 @@ import { clockLabel, teamInfo, type TeamInfo } from '../espn/model';
 import { kickoffText, smallLogo, teamVars } from '../format';
 import { usePoll } from '../hooks/usePoll';
 import { Fresh } from './Fresh';
+import { Logo } from './Logo';
 import { linkTo } from '../route';
 
 function nextIn(sb: EspnScoreboard): number | null {
@@ -33,7 +34,10 @@ export function Scoreboard() {
 
   const live = sb?.events.filter((e) => e.status.type.state === 'in') ?? [];
   const pre = sb?.events.filter((e) => e.status.type.state === 'pre').sort(byDate) ?? [];
-  const post = sb?.events.filter((e) => e.status.type.state === 'post').sort(byDate).reverse() ?? [];
+  const ended = sb?.events.filter((e) => e.status.type.state === 'post').sort(byDate).reverse() ?? [];
+  // ESPN marks postponed and canceled games 'post' too; they aren't finals.
+  const post = ended.filter((e) => e.status.type.completed);
+  const off = ended.filter((e) => !e.status.type.completed);
 
   return (
     <div class="app view-scoreboard">
@@ -57,6 +61,12 @@ export function Scoreboard() {
       {poll.error && !sb && <p class="error">Couldn't reach ESPN: {poll.error}</p>}
       {!sb && !poll.error && <p class="empty">Loading the week…</p>}
       {sb && sb.events.length === 0 && <p class="empty">No games this week.</p>}
+      {/* ESPN's week runs Wednesday to Tuesday, so Monday night still shows the week that just ended. */}
+      {!SNAPSHOT && !ref && sb && sb.events.length > 0 && live.length === 0 && pre.length === 0 && week != null && week < 18 && (
+        <button class="week-next" onClick={() => step(1)}>
+          All of week {week} is final. Week {week + 1} →
+        </button>
+      )}
       <div class="sb-list">
         {live.length > 0 && <h2 class="sb-group">Live</h2>}
         {live.map((e) => (
@@ -68,6 +78,10 @@ export function Scoreboard() {
         ))}
         {post.length > 0 && <h2 class="sb-group">Final</h2>}
         {post.map((e) => (
+          <GameCard key={e.id} e={e} />
+        ))}
+        {off.length > 0 && <h2 class="sb-group">Postponed or canceled</h2>}
+        {off.map((e) => (
           <GameCard key={e.id} e={e} />
         ))}
       </div>
@@ -88,15 +102,17 @@ function GameCard({ e }: { e: EspnEvent }) {
   const close = st === 'in' && (e.status.period ?? 0) >= 4 && Math.abs(home.score - away.score) <= 8;
   const status =
     st === 'pre' ? kickoffText(e.date) : clockLabel(e.status.type.name, e.status.period ?? 0, e.status.displayClock, e.status.type.shortDetail);
-  const winner = st === 'post' ? (home.score > away.score ? home.id : away.score > home.score ? away.id : '') : '';
+  const done = st === 'post' && e.status.type.completed;
+  const winner = done ? (home.score > away.score ? home.id : away.score > home.score ? away.id : '') : '';
+  const showScore = st === 'in' || done;
   // Broadcast only: no betting lines on this viewer.
   const meta = c.broadcasts?.[0]?.names?.join('/') ?? '';
 
   return (
     <a class={`sb-game is-${st === 'in' ? 'live' : st === 'pre' ? 'pre' : 'final'}${close ? ' is-close' : ''}`} href={`#/g/${e.id}`} onClick={linkTo(e.id)}>
       <div class="sb-teams">
-        <TeamRow t={away} st={st} poss={sit?.possession === away.id} winner={winner} />
-        <TeamRow t={home} st={st} poss={sit?.possession === home.id} winner={winner} />
+        <TeamRow t={away} showScore={showScore} poss={sit?.possession === away.id} winner={winner} />
+        <TeamRow t={home} showScore={showScore} poss={sit?.possession === home.id} winner={winner} />
       </div>
       <div class="sb-side">
         <div class="sb-status">{status}</div>
@@ -113,15 +129,15 @@ function GameCard({ e }: { e: EspnEvent }) {
   );
 }
 
-function TeamRow({ t, st, poss, winner }: { t: TeamInfo; st: string; poss: boolean; winner: string }) {
+function TeamRow({ t, showScore, poss, winner }: { t: TeamInfo; showScore: boolean; poss: boolean; winner: string }) {
   const res = winner ? (winner === t.id ? ' is-winner' : ' is-loser') : '';
   return (
     <div class={`sb-team${res}`} style={teamVars(t)}>
-      {t.logo && <img class="logo" src={smallLogo(t.logo)} alt="" width={28} height={28} loading="lazy" />}
+      {t.logo && <Logo src={smallLogo(t.logo)} abbr={t.abbr} size={28} />}
       <span class="abbr">{t.abbr}</span>
       {poss && <span class="poss" aria-label="has the ball" />}
       <span class="rec">{t.record}</span>
-      {st !== 'pre' && <span class="score">{t.score}</span>}
+      {showScore && <span class="score">{t.score}</span>}
     </div>
   );
 }
@@ -129,8 +145,8 @@ function TeamRow({ t, st, poss, winner }: { t: TeamInfo; st: string; poss: boole
 export function Footer() {
   return (
     <footer class="footer">
-      Live data: ESPN (unofficial, personal use). Advanced stats: nflverse / nflfastR, CC-BY 4.0. No ads, no tracking. Not affiliated
-      with ESPN, the NFL or any team.
+      Live data and logos: ESPN (unofficial, personal use), fetched by your browser straight from ESPN. Advanced stats: nflverse /
+      nflfastR, CC-BY 4.0. No ads, no analytics. Not affiliated with ESPN, the NFL or any team.
     </footer>
   );
 }

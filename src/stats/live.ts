@@ -38,11 +38,13 @@ const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.l
 
 export function teamNumbers(g: Game, team: TeamInfo): TeamNumbers {
   const mine = g.plays.filter((p) => p.offenseId === team.id && isScrimmage(p));
-  const epas = mine.map((p) => p.epa).filter((x): x is number => x != null);
+  // EPA is set on every snap nflverse would count (including passes and runs a flag wiped out), so take them all.
+  const epas = g.plays.filter((p) => p.offenseId === team.id && p.epa != null).map((p) => p.epa as number);
   const early = mine.filter(isEarlyDownNeutral);
   const thirds = mine.filter((p) => p.down === 3);
   const drives = g.drives.filter((d) => d.teamId === team.id && !d.isLive && !(d.cap === 'half' && d.offensivePlays <= 2 && d.points === 0));
-  const turnovers = g.plays.filter((p) => p.offenseId === team.id && p.turnover && !p.noPlay);
+  // A team's turnovers are its own snaps that gave the ball away; a muffed punt is the returner's, not the punter's.
+  const turnovers = mine.filter((p) => p.turnover);
   const sign = team.side === 'home' ? 1 : -1;
   const startDrives = g.drives.filter((d) => d.teamId === team.id);
   return {

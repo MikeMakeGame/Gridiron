@@ -40,7 +40,15 @@ export function WpChart({ g }: { g: Game }) {
             {Array.from({ length: quarters }, (_, i) => (
               <rect key={i} class={`wp-q${i % 2 ? ' odd' : ''}`} x={x(i * 900)} y={0} width={x(Math.min(span, (i + 1) * 900)) - x(i * 900)} height={H} />
             ))}
+            {Array.from({ length: quarters }, (_, i) => (
+              <text key={`q${i}`} class="wp-qlabel" x={x(Math.min(span, i * 900 + 450))} y={H - 2} text-anchor="middle">
+                {i < 4 ? `Q${i + 1}` : 'OT'}
+              </text>
+            ))}
             <line class="wp-mid" x1={0} x2={w} y1={y(0.5)} y2={y(0.5)} />
+            <text class="wp-qlabel" x={w - 2} y={y(0.5) - 3} text-anchor="end">
+              50%
+            </text>
             {d && <path class="wp-line" d={d} />}
             {last && <circle class="wp-now" cx={x(last.gameSec)} cy={y(last.wpHome!)} r={4} />}
             {last && !done && (

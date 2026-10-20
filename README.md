@@ -22,16 +22,16 @@ A personal, non-commercial project. Not affiliated with ESPN, the NFL or any tea
 
 ## Live EPA, estimated, and how good the estimate is
 
-nflverse's EPA arrives the morning after. During the game this page estimates it: `scripts/nflverse_build.py` bakes an expected-points table (down x distance x yard line, from nflfastR's own EP over 2022-2025), and each scrimmage snap's EPA is EP after minus EP before (TD = 7, safety = -2, a change of possession flips the sign).
+nflverse's EPA arrives the morning after. During the game this page estimates it: `scripts/nflverse_build.py` bakes an expected-points table (down x distance x yard line, from nflfastR's own EP over 2022-2025), and each snap's EPA is EP after minus EP before (TD = 7, safety = -2, a change of possession flips the sign). It counts the snaps nflverse counts: passes and runs, including ones a flag wiped out, but not kneel-downs or spikes.
 
 `scripts/calibrate.ts` runs the page's own code over ESPN's play-by-play for every finished game of the season, stops at the end of Q1, Q2, Q3 and the final, and compares each team's EPA/play so far with nflverse's for the same quarters. The EP table is built from 2022-2025 only, so 2026 games are unseen. On 2026 weeks 1-6 (92 games, 184 team-games):
 
 | Checked at | Mean miss | 90% within | Guess-the-average baseline |
 |---|---|---|---|
-| End of Q1 | 0.067 | 0.134 | 0.313 |
-| Halftime | 0.053 | 0.118 | 0.194 |
-| End of Q3 | 0.049 | 0.110 | 0.174 |
-| Final | 0.040 | 0.085 | 0.154 |
+| End of Q1 | 0.048 | 0.110 | 0.313 |
+| Halftime | 0.037 | 0.072 | 0.194 |
+| End of Q3 | 0.033 | 0.067 | 0.173 |
+| Final | 0.033 | 0.073 | 0.154 |
 
 Single plays are rougher (0.15 mean miss per play); the team number is the one to trust. The page prints the final and halftime figures under the number.
 
@@ -39,7 +39,8 @@ Single plays are rougher (0.15 mean miss per play); the team number is the one t
 
 `scripts/live-probe.ts` logged the game summary every 20 s for the whole game; `scripts/probe-report.ts` summarizes the log.
 
-- ESPN's game summary has **no `situation` block** during a live game, and no timeouts anywhere in it. The page takes down & distance from the latest play and timeouts from the scoreboard feed (polled every 30 s while the game is live).
+- ESPN's game summary has **no `situation` block** during a live game, and no timeouts anywhere in it. The page takes down & distance from the latest play and timeouts from the scoreboard feed (polled every 15 s with the game while it is live).
+- ESPN's scoreboard feed posts each new play 10-20 s before the game summary does, so the top of the game page shows that play first, marked "just in", until the summary catches up.
 - Plays appear in the feed about a minute after the snap (median ~55 s from ESPN's own `wallclock`, including our poll gap).
 - The header clock only moves when a play is posted.
 - No score ever went backwards during the live game (it does happen in finished games' rows; see `buildGame`).
@@ -58,37 +59,35 @@ npm run nflverse
 npm run dev
 ```
 
-Then open http://127.0.0.1:5191. `npm run nflverse` writes `public/data/` (EP table + per-game advanced stats); the app works without it, minus EPA.
+Then open http://127.0.0.1:5231. `npm run nflverse` writes `public/data/` (EP table + per-game advanced stats); the app works without it, minus EPA.
 
 Optional: `npx tsx scripts/calibrate.ts` refreshes the calibration line (one polite ESPN request per new finished game, cached).
 
-### The frozen copy (Claude artifact)
+### Offline snapshot
 
-A Claude artifact can't fetch ESPN, so it gets a snapshot: `npx tsx scripts/snapshot.ts` freezes this week's games into `snapshot-public/`, and `npm run build:snapshot` builds `dist-snapshot/`, which runs with no network.
+For a host that blocks network access: `npx tsx scripts/snapshot.ts` freezes this week's games into `snapshot-public/`, and `npm run build:snapshot` builds `dist-snapshot/`, which runs with no network and can replay any finished game.
+
+### Tests
+
+```bash
+npm test
+```
+
+The polling engine (`src/hooks/poller.ts`) runs under fake timers: a hung request recovers, errors never poll faster than the normal schedule, a game opened before kickoff picks up when it goes live, and a malformed answer never replaces good data. Play-classification tests cover kneels, spikes, flags that wipe out a play, muffed punts and safeties.
 
 ### Hosting (GitHub Pages)
 
 `.github/workflows/pages.yml` builds on push and twice a day (18:00 and 06:00 UTC; nflverse's 2026 file was updated at 16:28 UTC on Monday 10-19), then publishes to Pages. ESPN sends `Access-Control-Allow-Origin: *`, so each visitor's browser reads ESPN directly; the site itself is static. The build uses relative paths, so it works at any Pages sub-path.
 
-First-time setup, from the repo root with `gh` logged in (enable Pages before the first push, so the first workflow run can deploy):
-
-```bash
-gh repo create MikeMakeGame/Gridiron --public --source . --remote origin
-```
-
-```bash
-gh api -X POST repos/MikeMakeGame/Gridiron/pages -f build_type=workflow
-```
-
-```bash
-git push -u origin main
-```
+For a fork: in the repository's settings, set Pages to build from GitHub Actions; the workflow does the rest.
 
 ## Data and terms
 
 - **Live data**: ESPN's unofficial `site.api.espn.com` JSON. Undocumented, can change without notice, and ESPN's terms don't grant this use: keep it personal, keep polling polite (15 s while live and visible, paused when the tab is hidden, backs off on errors).
 - **Advanced stats**: [nflverse](https://github.com/nflverse/nflverse-data) play-by-play (nflfastR models), CC-BY 4.0. Credit stays in the app's footer. The repo doesn't store the derived data; the workflow rebuilds it.
 - **Code**: MIT (see `LICENSE`), which covers the code only, not ESPN's data, nflverse's data, or team names and logos.
+- **Font**: Barlow Condensed (SIL Open Font License), served from this site; see `src/fonts/README.md`.
+- **Privacy**: no ads, no analytics, no cookies. Your browser talks to this site and to ESPN (scores and logos), nothing else.
 
 ## Layout
 

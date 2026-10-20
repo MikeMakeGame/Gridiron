@@ -1,5 +1,7 @@
-// Polite polling: one request at a time, paused while the tab is hidden, backs off on errors.
+// Polite polling for Preact: one request at a time, a timeout on every request, paused while the tab is hidden,
+// backs off on errors without ever beating the normal schedule. The engine is ./poller (tested on its own).
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
+import { Poller, type PollerDeps } from './poller';
 
 export interface PollState<T> {
   data: T | null;
@@ -9,110 +11,69 @@ export interface PollState<T> {
   refresh: () => void;
 }
 
-const BACKOFF = [15_000, 30_000, 60_000];
-
-function saveData(): boolean {
-  const c = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
-  return !!c?.saveData;
-}
+const browserDeps: PollerDeps = {
+  now: () => Date.now(),
+  setTimeout: (fn, ms) => window.setTimeout(fn, ms),
+  clearTimeout: (id) => window.clearTimeout(id as number),
+  hidden: () => document.visibilityState === 'hidden',
+  saveData: () => !!(navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData,
+};
 
 /**
  * @param key      refetches from scratch when it changes
- * @param fetcher  the request
- * @param nextIn   ms until the next poll given the latest data; null stops polling
+ * @param fetcher  the request; throw to report bad data (the last good data stays on screen)
+ * @param nextIn   ms until the next poll given the latest data; null = it will never change, stop
+ * @param enabled  false = don't poll yet (e.g. waiting on another request)
  */
 export function usePoll<T>(
   key: string,
   fetcher: (signal: AbortSignal) => Promise<T>,
   nextIn: (data: T) => number | null,
+  enabled = true,
 ): PollState<T> {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastOk, setLastOk] = useState<number | null>(null);
   const [polling, setPolling] = useState(false);
-  const timer = useRef<number | undefined>(undefined);
-  const inflight = useRef<AbortController | null>(null);
-  const fails = useRef(0);
-  const delay = useRef<number | null>(null);
-  const lastOkRef = useRef<number | null>(null);
-  const lastTry = useRef<number | null>(null);
-  const run = useRef<() => void>(() => {});
+  const poller = useRef<Poller<T> | null>(null);
 
-  // Fresh refs every render so the scheduler always calls the current fetcher.
+  // Fresh refs every render so the poller always calls the current fetcher.
   const fetcherRef = useRef(fetcher);
   const nextInRef = useRef(nextIn);
   fetcherRef.current = fetcher;
   nextInRef.current = nextIn;
 
-  const schedule = (ms: number | null) => {
-    window.clearTimeout(timer.current);
-    delay.current = ms;
-    if (ms == null || document.visibilityState === 'hidden') {
-      setPolling(false);
-      return;
-    }
-    setPolling(true);
-    timer.current = window.setTimeout(() => run.current(), ms * (saveData() ? 4 : 1));
-  };
-
-  run.current = async () => {
-    if (inflight.current) return;
-    lastTry.current = Date.now();
-    const ac = new AbortController();
-    inflight.current = ac;
-    try {
-      const d = await fetcherRef.current(ac.signal);
-      if (ac.signal.aborted) return;
-      fails.current = 0;
-      const now = Date.now();
-      lastOkRef.current = now;
-      setData(d);
-      setError(null);
-      setLastOk(now);
-      schedule(nextInRef.current(d));
-    } catch (e) {
-      if (ac.signal.aborted) return;
-      setError(e instanceof Error ? e.message : String(e));
-      schedule(BACKOFF[Math.min(fails.current++, BACKOFF.length - 1)]);
-    } finally {
-      if (inflight.current === ac) inflight.current = null;
-    }
-  };
-
   useEffect(() => {
     setData(null);
     setError(null);
     setLastOk(null);
-    lastOkRef.current = null;
-    lastTry.current = null;
-    fails.current = 0;
-    run.current();
-    const onVis = () => {
-      if (document.visibilityState === 'hidden') {
-        window.clearTimeout(timer.current);
-        setPolling(false);
-        return;
-      }
-      // Back from the background: fetch now if a poll was due, else resume the schedule.
-      // Measured from the last attempt, so a run of errors keeps its backoff across tab switches.
-      const due = delay.current == null ? null : delay.current * (saveData() ? 4 : 1);
-      const age = lastTry.current ? Date.now() - lastTry.current : Infinity;
-      if (due != null && age >= due) run.current();
-      else if (due != null) schedule((due - age) / (saveData() ? 4 : 1));
-    };
+    if (!enabled) return;
+    const p = new Poller<T>(
+      {
+        fetcher: (s) => fetcherRef.current(s),
+        nextIn: (d) => nextInRef.current(d),
+        onData: (d, at) => {
+          setData(d);
+          setError(null);
+          setLastOk(at);
+        },
+        onError: setError,
+        onPolling: setPolling,
+      },
+      browserDeps,
+    );
+    poller.current = p;
+    p.start();
+    const onVis = () => p.visibilityChanged();
     document.addEventListener('visibilitychange', onVis);
     return () => {
       document.removeEventListener('visibilitychange', onVis);
-      window.clearTimeout(timer.current);
-      inflight.current?.abort();
-      inflight.current = null;
+      p.stop();
+      if (poller.current === p) poller.current = null;
     };
-  }, [key]);
+  }, [key, enabled]);
 
-  const refresh = useCallback(() => {
-    window.clearTimeout(timer.current);
-    run.current();
-  }, []);
+  const refresh = useCallback(() => poller.current?.refresh(), []);
 
   return { data, error, lastOk, polling, refresh };
 }

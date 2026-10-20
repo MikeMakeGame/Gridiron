@@ -1,15 +1,43 @@
 // Every network read in one place. Live mode reads ESPN directly (CORS is open);
-// snapshot mode (the Claude artifact build) reads JSON bundled next to the page.
+// snapshot mode (the offline build) reads JSON bundled next to the page.
 import type { EspnScoreboard, EspnSummary } from './types';
 import type { EpTable } from '../stats/ep';
+import { RetryAfterError } from '../hooks/poller';
 
 const ESPN = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl';
 export const SNAPSHOT = import.meta.env.MODE === 'snapshot';
 
 async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   const r = await fetch(url, { signal });
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText} for ${url}`);
+  if (r.status === 429 || r.status === 503) {
+    // Slow down when asked: Retry-After in seconds (or an HTTP date), else five minutes.
+    const ra = r.headers.get('Retry-After');
+    const secs = ra == null ? NaN : /^\d+$/.test(ra) ? Number(ra) : (Date.parse(ra) - Date.now()) / 1000;
+    throw new RetryAfterError(`ESPN asked us to slow down (${r.status})`, Number.isFinite(secs) && secs > 0 ? secs * 1000 : 300_000);
+  }
+  if (!r.ok) throw new Error(`ESPN answered ${r.status}`);
   return (await r.json()) as T;
+}
+
+/** A 200 with the wrong shape is an error, so it never replaces good data on screen. */
+export function checkSummary(s: unknown): EspnSummary {
+  const c = (s as EspnSummary)?.header?.competitions?.[0];
+  if (!c || !Array.isArray(c.competitors) || c.competitors.length !== 2 || !c.status?.type?.state)
+    throw new Error("ESPN sent a game page we can't read");
+  if (!c.competitors.some((x) => x.homeAway === 'home') || !c.competitors.some((x) => x.homeAway === 'away'))
+    throw new Error("ESPN sent a game page we can't read");
+  return s as EspnSummary;
+}
+
+export function checkScoreboard(s: unknown): EspnScoreboard {
+  const ev = (s as EspnScoreboard)?.events;
+  if (!Array.isArray(ev)) throw new Error("ESPN sent a scoreboard we can't read");
+  for (const e of ev) {
+    const c = e?.competitions?.[0];
+    if (!e?.id || !e.status?.type?.state || !c || !Array.isArray(c.competitors) || c.competitors.length !== 2)
+      throw new Error("ESPN sent a scoreboard we can't read");
+  }
+  return s as EspnScoreboard;
 }
 
 async function getOptional<T>(url: string): Promise<T | null> {
@@ -38,13 +66,22 @@ export function scoreboardUrl(ref?: WeekRef): string {
   return `${ESPN}/scoreboard?dates=${ref.season}&seasontype=${ref.seasonType}&week=${ref.week}`;
 }
 
-export function getScoreboard(ref: WeekRef | undefined, signal?: AbortSignal): Promise<EspnScoreboard> {
-  return getJson<EspnScoreboard>(scoreboardUrl(ref), signal);
+export async function getScoreboard(ref: WeekRef | undefined, signal?: AbortSignal): Promise<EspnScoreboard> {
+  return checkScoreboard(await getJson<unknown>(scoreboardUrl(ref), signal));
 }
 
-export function getSummary(id: string, signal?: AbortSignal): Promise<EspnSummary> {
+/** The scoreboard for one calendar day (US Eastern, as ESPN files games), e.g. the day of the game being viewed. */
+export async function getScoreboardForDay(isoDate: string, signal?: AbortSignal): Promise<EspnScoreboard> {
+  if (SNAPSHOT) return getScoreboard(undefined, signal);
+  const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' })
+    .format(new Date(isoDate))
+    .replace(/-/g, '');
+  return checkScoreboard(await getJson<unknown>(`${ESPN}/scoreboard?dates=${day}`, signal));
+}
+
+export async function getSummary(id: string, signal?: AbortSignal): Promise<EspnSummary> {
   const url = SNAPSHOT ? `./snap/summary-${id}.json` : `${ESPN}/summary?event=${encodeURIComponent(id)}`;
-  return getJson<EspnSummary>(url, signal);
+  return checkSummary(await getJson<unknown>(url, signal));
 }
 
 // Cached once it loads; a miss is retried on the next call, so a late-arriving table still gets picked up.

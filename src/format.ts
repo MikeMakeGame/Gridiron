@@ -17,12 +17,13 @@ function isNeutral(hex: string): boolean {
   return Math.max(r, g, b) - Math.min(r, g, b) < 24;
 }
 
-// ESPN's image combiner serves a small logo instead of the 500px PNG; the snapshot bundles its own copies.
+// ESPN's dark-background logo set (navy and black marks vanish on this page otherwise), resized by ESPN's image
+// combiner instead of the 500px PNG; the snapshot bundles its own copies.
 export function smallLogo(url: string, px = 64): string {
-  const m = url.match(/^https:\/\/a\.espncdn\.com(\/i\/teamlogos\/.+\.png)$/);
+  const m = url.match(/^https:\/\/a\.espncdn\.com\/i\/teamlogos\/nfl\/500(?:-dark)?\/(?:scoreboard\/)?([a-z]+\.png)$/);
   if (!m) return url;
-  if (import.meta.env.MODE === 'snapshot') return `./logos/${m[1].split('/').pop()}`;
-  return `https://a.espncdn.com/combiner/i?img=${m[1]}&w=${px}&h=${px}`;
+  if (import.meta.env.MODE === 'snapshot') return `./logos/${m[1]}`;
+  return `https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500-dark/${m[1]}&w=${px}&h=${px}`;
 }
 
 export function yardText(pos: number): string {

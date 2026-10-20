@@ -1,6 +1,6 @@
 // One game, one scroll: score bar, now, drives, numbers, players, post-game model numbers.
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { getEpTable, getScoreboard, getSummary, SNAPSHOT } from '../espn/api';
+import { getEpTable, getScoreboardForDay, getSummary, SNAPSHOT } from '../espn/api';
 import { buildGame, periodLabel, type Game, type TeamInfo } from '../espn/model';
 import { biggestPlays, possessionsLeft } from '../stats/live';
 import type { EspnSummary } from '../espn/types';
@@ -8,6 +8,7 @@ import type { EpTable } from '../stats/ep';
 import { agoText, smallLogo, teamVars } from '../format';
 import { useNow, usePoll } from '../hooks/usePoll';
 import { Fresh } from './Fresh';
+import { Logo } from './Logo';
 import { linkTo } from '../route';
 import { WpChart } from './WpChart';
 import { Drives } from './Drives';
@@ -17,26 +18,33 @@ import { Advanced } from './Advanced';
 import { Epa, offenseAbbr, WpDelta } from './Badges';
 import { Footer } from './Scoreboard';
 
-function nextIn(s: EspnSummary): number | null {
-  if (SNAPSHOT) return null;
-  const st = s.header.competitions[0].status.type;
-  if (st.state === 'post') return null;
-  if (st.state === 'pre') {
-    const toKick = new Date(s.header.competitions[0].date).getTime() - Date.now();
-    return toKick < 30 * 60_000 ? 60_000 : 300_000;
-  }
-  if (st.name === 'STATUS_HALFTIME' || st.name === 'STATUS_END_PERIOD') return 30_000;
+/** How often to check a game in this state: often while live, slowly before kickoff, never once it's final. */
+export function pollInterval(state: 'pre' | 'in' | 'post', statusName: string, kickoffIso: string, now = Date.now()): number | null {
+  if (SNAPSHOT || state === 'post') return null;
+  if (state === 'pre') return new Date(kickoffIso).getTime() - now < 30 * 60_000 ? 60_000 : 300_000;
+  if (statusName === 'STATUS_HALFTIME' || statusName === 'STATUS_END_PERIOD') return 30_000;
   return 15_000;
+}
+
+function nextIn(s: EspnSummary): number | null {
+  const c = s.header.competitions[0];
+  return pollInterval(c.status.type.state, c.status.type.name, c.date);
 }
 
 export function GamePage({ id }: { id: string }) {
   const poll = usePoll(`g${id}`, (s) => getSummary(id, s), nextIn);
   // The scoreboard feed carries the timeouts, and it posts each new snap 10-20 s before the game summary
-  // does (measured on MNF 10-19), so it's polled alongside while this game is on.
+  // does (measured on MNF 10-19). It's the scoreboard for the game's own day, so it works for any week, and it
+  // follows the game: slow before kickoff, every 15 s live, off at the final.
+  const kickoff = poll.data?.header.competitions[0].date ?? '';
   const sb = usePoll(
-    `sb${id}`,
-    (s) => getScoreboard(undefined, s),
-    (d) => (!SNAPSHOT && d.events.find((e) => e.id === id)?.status.type.state === 'in' ? 15_000 : null),
+    `sb${id}-${kickoff}`,
+    (s) => getScoreboardForDay(kickoff, s),
+    (d) => {
+      const e = d.events.find((x) => x.id === id);
+      return e ? pollInterval(e.status.type.state, e.status.type.name, e.date) : null;
+    },
+    !!kickoff && !SNAPSHOT,
   );
   const sbSit = sb.data?.events.find((e) => e.id === id)?.competitions[0].situation;
   const timeouts = useMemo(
@@ -51,26 +59,53 @@ export function GamePage({ id }: { id: string }) {
     getEpTable().then(setEp);
   }, []);
 
-  const full = useMemo(() => (poll.data ? buildGame(poll.data, { ep, timeouts }) : null), [poll.data, ep, timeouts]);
-  const g = useMemo(() => (poll.data && replay != null ? buildGame(poll.data, { ep, upto: replay }) : full), [poll.data, ep, replay, full]);
+  // A payload that passes the shape check but still breaks the model keeps the last good game on screen.
+  const lastGood = useRef<{ data: EspnSummary; game: Game } | null>(null);
+  const full = useMemo(() => {
+    if (!poll.data) return null;
+    try {
+      const game = buildGame(poll.data, { ep, timeouts });
+      lastGood.current = { data: poll.data, game };
+      return game;
+    } catch (e) {
+      console.warn('Gridiron: could not read this update', e);
+      return lastGood.current?.game ?? null;
+    }
+  }, [poll.data, ep, timeouts]);
+  const unreadable = !!poll.data && lastGood.current?.data !== poll.data;
+  const g = useMemo(() => {
+    if (!poll.data || replay == null) return full;
+    try {
+      return buildGame(poll.data, { ep, upto: replay });
+    } catch {
+      return full;
+    }
+  }, [poll.data, ep, replay, full]);
+
+  useEffect(() => {
+    // A game opens at its top, not at wherever the scoreboard was scrolled to.
+    window.scrollTo(0, 0);
+  }, [id]);
 
   // A snap the scoreboard already has and the summary doesn't yet: shown on top, labelled, until the summary catches up.
   // Play ids match across the two feeds (checked on MNF 10-19). A snap the summary never posts (a reversed play)
-  // stops showing after 90 s.
+  // stops showing after 90 s. Scores and kickoffs count too (the down is unset right after them).
   const aheadSince = useRef<{ id: string; at: number } | null>(null);
   const ahead = useMemo(() => {
     const lp = sbSit?.lastPlay;
-    if (!g || replay != null || g.state !== 'in' || !sbSit || !lp?.id || !((sbSit.down ?? 0) > 0)) return null;
+    if (!g || replay != null || g.state !== 'in' || !sbSit || !lp?.id) return null;
     if (/timeout|end of|end period|two-minute|coin toss/i.test(`${lp.type?.text ?? ''} ${lp.text ?? ''}`)) return null;
     if (g.plays.some((p) => p.id === lp.id)) return null;
     if (aheadSince.current?.id !== lp.id) aheadSince.current = { id: lp.id, at: Date.now() };
     if (Date.now() - aheadSince.current.at > 90_000) return null;
     const ev = sb.data?.events.find((e) => e.id === id)?.competitions[0].competitors;
     const scoreOf = (side: 'home' | 'away') => Number(ev?.find((c) => c.homeAway === side)?.score ?? NaN);
+    const hasSnap = (sbSit.down ?? 0) > 0;
     return {
       text: lp.text ?? '',
-      situation: [sbSit.shortDownDistanceText, sbSit.possessionText].filter(Boolean).join(' · '),
-      redZone: !!sbSit.isRedZone,
+      // No down after a score or before a kickoff: no situation line rather than a stale one.
+      situation: hasSnap ? [sbSit.shortDownDistanceText, sbSit.possessionText].filter(Boolean).join(' · ') : '',
+      redZone: hasSnap && !!sbSit.isRedZone,
       possession: sbSit.possession ?? null,
       wpHome: lp.probability?.homeWinPercentage ?? null,
       // The score bar follows the newer feed too, so a just-in touchdown and the score agree.
@@ -139,8 +174,15 @@ export function GamePage({ id }: { id: string }) {
             <button class="fresh is-idle" onClick={() => (setReplay(null), setPlaying(false))}>
               replay · exit
             </button>
-          ) : (
-            <Fresh live={live} lastOk={poll.lastOk} polling={poll.polling} error={poll.error} onRefresh={poll.refresh} />
+          ) : g.state === 'post' ? null : (
+            // A final game has nothing left to refresh, so no "7s ago" on it.
+            <Fresh
+              live={live}
+              lastOk={poll.lastOk}
+              polling={poll.polling}
+              error={poll.error ?? (unreadable ? "Couldn't read ESPN's latest update" : null)}
+              onRefresh={poll.refresh}
+            />
           )}
         </div>
         <TeamCell t={withScore(g.home, ahead?.home)} poss={poss === g.home.id} tos={g.situation?.homeTimeouts ?? null} />
@@ -176,9 +218,9 @@ export function GamePage({ id }: { id: string }) {
 
       <section class="section" id="now">
         {g.state === 'pre' && <Pregame g={g} />}
-        {(ahead?.situation || (g.situation && g.situation.text)) && (
+        {(ahead ? ahead.situation : g.situation?.text) && (
           <div class={`situation${(ahead ? ahead.redZone : g.situation?.redZone) ? ' is-redzone' : ''}`}>
-            <span class="sit-text">{ahead?.situation || g.situation?.text}</span>
+            <span class="sit-text">{ahead ? ahead.situation : g.situation?.text}</span>
             {(ahead ? ahead.redZone : g.situation?.redZone) && <span class="sit-extra">Red zone</span>}
             {possLeft != null && possLeft < 6 && <span class="sit-extra">{possessionsText(possLeft)}</span>}
           </div>
@@ -245,7 +287,7 @@ function withScore(t: TeamInfo, s: number | undefined): TeamInfo {
 function TeamCell({ t, poss, tos }: { t: TeamInfo; poss: boolean; tos: number | null }) {
   return (
     <div class={`sbar-team ${t.side}`} style={teamVars(t)}>
-      {t.logo && <img class="logo" src={smallLogo(t.logo, 80)} alt="" width={32} height={32} />}
+      {t.logo && <Logo src={smallLogo(t.logo, 80)} abbr={t.abbr} size={32} />}
       <span class="abbr">{t.abbr}</span>
       <span class="score">{t.score}</span>
       {poss && <span class="poss" aria-label="has the ball" />}

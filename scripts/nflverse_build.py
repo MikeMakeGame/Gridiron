@@ -199,7 +199,9 @@ def r3(x):
 
 
 def team_block(plays: list[dict], team: str) -> dict:
-    mine = [p for p in plays if p["posteam"] == team and (p["pass"] == "1" or p["rush"] == "1") and fnum(p["epa"]) is not None]
+    # Snaps from scrimmage only: two-point tries are flagged pass/rush in nflverse but aren't part of a team's EPA/play.
+    mine = [p for p in plays if p["posteam"] == team and (p["pass"] == "1" or p["rush"] == "1")
+            and fnum(p["epa"]) is not None and p["two_point_attempt"] != "1"]
     passes = [p for p in mine if p["pass"] == "1"]
     rushes = [p for p in mine if p["rush"] == "1"]
     early = [p for p in mine if inum(p["down"]) in (1, 2)]

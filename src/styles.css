@@ -1,7 +1,14 @@
 /* GRIDIRON — "Chyron on ink": broadcast score-bug tabs and ledger rules on true black; numbers are the only loud thing.
-   Font: Barlow Condensed 500/700 (display, labels, every numeral) + system-ui for prose. Load via <link> in index.html:
-   https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&display=swap
+   Font: Barlow Condensed 500/700 (display, labels, every numeral) + system-ui for prose. Served from this site
+   (src/fonts, SIL Open Font License), so the page talks to no font host.
    Team colour --tc is lifted to a shared lightness in OKLCH (--ta) so navy, maroon and black all read on ink. */
+
+@font-face { font-family: 'Barlow Condensed'; font-style: normal; font-weight: 500; font-display: swap;
+  src: url('./fonts/barlow-condensed-500-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Barlow Condensed'; font-style: normal; font-weight: 700; font-display: swap;
+  src: url('./fonts/barlow-condensed-700-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 
 :root {
   --bg: #050607; --s1: #0c0f12; --s2: #12161b;
@@ -51,6 +58,12 @@ img { display: block; }
 
 /* shared atoms ------------------------------------------------------------ */
 .logo { width: 30px; height: 30px; object-fit: contain; flex: none; }
+/* until a logo arrives, its circle shows the team's letters; the image waits out of layout */
+.logo-ph {
+  display: grid; place-items: center; border-radius: 50%; background: var(--s2);
+  font: 700 10px/1 var(--disp); letter-spacing: .02em; color: var(--tx2); overflow: hidden;
+}
+.logo-loading { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .abbr, .score, .clock, .brand, .week { font-family: var(--disp); }
 
 /* ball marker: a small football, CSS only */
@@ -87,6 +100,12 @@ img { display: block; }
 .brand::before { content: ""; width: 10px; height: 18px; background: var(--tx); clip-path: polygon(0 0, 100% 0, 100% 62%, 0 100%); }
 .week { margin-left: auto; display: flex; align-items: center; font-weight: 500; font-size: 15px; letter-spacing: .1em; text-transform: uppercase; color: var(--tx2); white-space: nowrap; }
 .week-step { width: 34px; height: 34px; font: 500 22px/1 var(--disp); color: var(--tx); text-align: center; }
+.week-next {
+  display: block; width: 100%; margin: 14px 0 0; padding: 11px 12px;
+  font: 700 14px/1.2 var(--disp); letter-spacing: .1em; text-transform: uppercase; text-align: left;
+  color: var(--tx); border: 1px solid var(--line2); background: var(--s1);
+}
+.week-next:active { background: var(--s2); }
 
 .sb-group {
   display: flex; align-items: center; gap: 10px; padding: 22px var(--pad) 8px;
@@ -211,6 +230,7 @@ img { display: block; }
 .wp-q { fill: #fff; fill-opacity: 0; }
 .wp-q.odd { fill-opacity: .045; }
 .wp-mid { stroke: var(--tx3); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+.wp-qlabel { font: 700 9px var(--disp); letter-spacing: .1em; fill: var(--tx3); }
 .wp-line { fill: none; stroke: var(--tx); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .wp-now { fill: var(--tx); stroke: var(--tx); stroke-opacity: .5; stroke-width: 0; }
 .wp-label { font: 700 11px var(--disp); letter-spacing: .14em; fill: var(--ta); paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }

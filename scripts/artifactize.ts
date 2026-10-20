@@ -1,5 +1,5 @@
-// Turns dist-snapshot/index.html into the shape a Claude artifact publishes: page content only
-// (the host wraps it in its own <html>/<head>/<body>), title first, the side-gutter promise beside it.
+// Turns dist-snapshot/index.html into page content only, for an embedding host that wraps pages in its own
+// <html>/<head>/<body>: title first, then the host's side-gutter hint, stylesheets, the script and the mount point.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 

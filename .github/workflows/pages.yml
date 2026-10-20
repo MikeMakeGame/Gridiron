@@ -1,5 +1,7 @@
 # Builds the site and the nightly nflverse numbers, then publishes to GitHub Pages.
 # Live data is fetched by each visitor's browser straight from ESPN; nothing here calls ESPN except the calibration step.
+# Action majors are the Node 24 ones (checked 2026-10-19: checkout v7, setup-node v7, setup-python v7, cache v6,
+# upload-pages-artifact v5 -> upload-artifact v7, deploy-pages v5).
 name: pages
 
 on:
@@ -12,10 +14,8 @@ on:
     - cron: '0 6 * * *'
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+# Nothing by default; each job asks for only what it needs.
+permissions: {}
 
 concurrency:
   group: pages
@@ -24,38 +24,46 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - name: Cache finished-game ESPN summaries
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .cache/espn
           key: espn-${{ github.run_id }}
           restore-keys: espn-
       - run: npm ci
+      - run: npm test
+      # If nflverse is down, the site still deploys: live scores work, the EPA estimate and post-game numbers wait.
       - name: nflverse numbers (EP table + per-game advanced)
         run: python -X utf8 -I scripts/nflverse_build.py
+        continue-on-error: true
       - name: Check the live EPA estimate against nflverse
         run: npx tsx scripts/calibrate.ts
         continue-on-error: true
       - run: npm run build
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

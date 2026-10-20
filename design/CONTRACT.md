@@ -1,11 +1,11 @@
 # Gridiron DOM contract
 
-The builder writes the Preact components; the stylist owns `src/styles.css`.
+The Preact components emit these class names; `src/styles.css` styles them.
 Both sides keep these class names. Add classes freely; never rename these.
 
 Viewport target: 390x844 portrait phone first; must not break at 320 or look silly at 1280 (center a max-width column, ~560px).
 Dark by default. Tabular numerals everywhere numbers sit in columns.
-Team colors arrive as CSS custom properties on the element: `--tc` (primary hex, e.g. `#AA0000`) and `--tc2` (alternate). Some team primaries are near-black (e.g. LV `#000000`), so the stylist must keep marks visible on dark (lift luminance / use outline).
+Team colors arrive as CSS custom properties on the element: `--tc` (primary hex, e.g. `#AA0000`) and `--tc2` (alternate). Some team primaries are near-black (e.g. LV `#000000`), so the styles must keep marks visible on dark (lift luminance / use outline).
 
 ## Root
 - `.app` root; `.view-scoreboard` or `.view-game` modifier.
@@ -30,7 +30,7 @@ Team colors arrive as CSS custom properties on the element: `--tc` (primary hex,
 - `.lastplay`: `.lp-label` ("Last play"), `.lp-text`, `.wpd` badge.
 - `.wpd` (WP delta badge, reused in play lists): text like "SF +4.1%". Modifiers `.big` (|delta| >= 10%), and `--tc` of the team that gained.
 - `.epa` (EPA badge, reused): "+1.8" with `.pos` / `.neg` modifiers and `.est` when estimated.
-- `.wpchart`: an inline SVG, full width, ~96px tall. Inside: `path.wp-line`, `line.wp-mid` (50% rule), `circle.wp-now`, `rect.wp-q` quarter bands (alternate subtle shading), `.wp-label` text for the two team abbreviations at top/bottom edges. Home on top (100%) and away on bottom (0%); the line takes `stroke` from a gradient or plain currentColor, stylist's call.
+- `.wpchart`: an inline SVG, full width, ~96px tall. Inside: `path.wp-line`, `line.wp-mid` (50% rule), `circle.wp-now`, `rect.wp-q` quarter bands (alternate subtle shading), `.wp-label` text for the two team abbreviations at top/bottom edges. Home on top (100%) and away on bottom (0%); the line takes `stroke` from a gradient or plain currentColor.
 - `.curdrive`: the current drive strip: `.cd-track` (100-yard track, own goal left, opponent goal right), `.cd-bar` (start-to-now span, `--tc`), `.cd-tick` per play, `.cd-meta` ("6 plays · 41 yds · 3:02").
 - `.section` wrapper for every block below, with an `id` for the jump bar: `#now`, `#drives`, `#numbers`, `#players`. Each has `h2.section-title`.
 - `.nums` live-numbers grid: a header row `.nums-head` (two team abbr cells with `--tc`), then `.nums-row` per stat: `.k` (label), `.v.away`, `.v.home`, `.better` on whichever side wins that stat. `.nums-note` small footnote line. `.tag-model` chip ("nflverse") and `.tag-est` chip ("est.").

@@ -1,5 +1,5 @@
 // A two-screen router: the scoreboard or one game. State lives here first and in the URL hash second,
-// because some hosts (the Claude artifact frame) don't let a page drive its own hash reliably.
+// because some embedding hosts don't let a framed page drive its own hash reliably.
 import { useEffect, useState } from 'preact/hooks';
 
 function parse(hash: string): string | null {

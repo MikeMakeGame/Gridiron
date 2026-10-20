@@ -179,12 +179,23 @@ function classify(p: EspnPlay): PlayKind {
     if (/\bpass\b|sacked|scrambles/.test(x)) return 'pass';
     return 'rush';
   }
-  if (t === 'penalty') return 'penalty';
+  if (t === 'penalty') {
+    // A flag that wiped out a real snap still describes the snap: nflverse counts it as that pass or run.
+    const before = x.split('penalty on')[0];
+    if (/\bpass\b|sacked|scrambles/.test(before)) return 'pass';
+    if (/\b(left|right) (end|tackle|guard)\b|up the middle|\brush(es)?\b/.test(before)) return 'rush';
+    return 'penalty';
+  }
   return 'other';
 }
 
 function isNoPlay(p: EspnPlay): boolean {
   return /no play/i.test(p.text);
+}
+
+/** Kneel-downs and spikes are clock plays, not football; nflverse leaves them out of EPA and success. */
+function isClockPlay(p: EspnPlay): boolean {
+  return /\bkneels\b|\bspiked?\b/i.test(p.text);
 }
 
 // The 40/60/100 rule: 1st down needs 40% of the distance, 2nd 60%, 3rd/4th all of it.
@@ -245,7 +256,9 @@ export function buildGame(s: EspnSummary, opts: BuildOptions = {}): Game {
   // The in-progress drive is the freshest copy; if ESPN also lists it under previous, the current one wins.
   const cur = s.drives?.current;
   const rawDrives: (EspnDrive & { live?: boolean })[] = (s.drives?.previous ?? []).filter((d) => d.id !== cur?.id);
-  if (cur && comp.status.type.state === 'in') rawDrives.push({ ...cur, live: true });
+  // At halftime ESPN can still list the half's last drive as current; it isn't happening now, so it isn't live.
+  const driving = comp.status.type.state === 'in' && comp.status.type.name !== 'STATUS_HALFTIME';
+  if (cur && driving) rawDrives.push({ ...cur, live: true });
   else if (cur) rawDrives.push(cur);
 
   const plays: Play[] = [];
@@ -301,7 +314,10 @@ export function buildGame(s: EspnSummary, opts: BuildOptions = {}): Game {
       const flagged = !!p.scoringPlay;
       const offPts = flagged ? (offenseId === home.id ? homeScore - prevHome : awayScore - prevAway) : 0;
       const defPts = flagged ? (offenseId === home.id ? awayScore - prevAway : homeScore - prevHome) : 0;
-      const scrimmage = (kind === 'pass' || kind === 'rush') && !noPlay && down > 0;
+      // A snap that counts for EPA (as nflverse counts it: real passes and runs, including ones a flag wiped out),
+      // and the narrower set that counts for success, explosives and turnovers (the play stood).
+      const attempt = (kind === 'pass' || kind === 'rush') && down > 0 && !isClockPlay(p);
+      const scrimmage = attempt && !noPlay;
       // ESPN's flag misses some fumbles; a 4th-down possession change is a turnover on downs, not a giveaway.
       const turnover = !!p.isTurnover || (scrimmage && down !== 4 && endTeamId !== offenseId && offPts <= 0);
       const td = scrimmage && offPts >= 6;
@@ -344,7 +360,7 @@ export function buildGame(s: EspnSummary, opts: BuildOptions = {}): Game {
         explosive: scrimmage && !turnover && ((kind === 'rush' && yards >= 10) || (kind === 'pass' && yards >= 20)),
         ddText: dd ? `${dd} · ${fieldText(ytg, off, def)}` : kind === 'kick' ? 'Kickoff' : p.type?.text ?? '',
       };
-      if (opts.ep && scrimmage) play.epa = estimateEpa(opts.ep, play, offPts, defPts);
+      if (opts.ep && attempt) play.epa = estimateEpa(opts.ep, play, offPts, defPts);
       if (wp != null) prevWp = wp;
       prevHome = homeScore;
       prevAway = awayScore;
@@ -357,6 +373,13 @@ export function buildGame(s: EspnSummary, opts: BuildOptions = {}): Game {
       drive.points = isHome ? after.homeScore - scoreBefore.home : after.awayScore - scoreBefore.away;
       // ESPN's current drive often has no end spot yet; the last snap's result is the truth.
       if (drive.isLive) drive.endPos = after.endTeamId === teamId ? 100 - after.endYtg : 100 - after.ytg;
+      // A drive that just scored is over, even while ESPN still calls it current (until the kickoff).
+      if (drive.isLive && after.scoring && drive.points > 0) {
+        drive.isLive = false;
+        drive.cap = drive.points >= 6 ? 'td' : drive.points >= 3 ? 'fg' : 'other';
+        drive.resultCode = drive.points >= 6 ? 'TD' : drive.points >= 3 ? 'FG' : drive.resultCode;
+        drive.endPos = drive.points >= 6 ? 100 : drive.endPos;
+      }
     }
     drives.push(drive);
   }
