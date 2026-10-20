@@ -1,5 +1,4 @@
 // All games of a week, live ones first.
-import { useState } from 'preact/hooks';
 import { getScoreboard, SNAPSHOT, type WeekRef } from '../espn/api';
 import type { EspnEvent, EspnScoreboard } from '../espn/types';
 import { clockLabel, teamInfo, type TeamInfo } from '../espn/model';
@@ -7,7 +6,8 @@ import { kickoffText, smallLogo, teamVars } from '../format';
 import { usePoll } from '../hooks/usePoll';
 import { Fresh } from './Fresh';
 import { Logo } from './Logo';
-import { linkTo } from '../route';
+import { linkTo, setBoardWeek, useBoardWeek } from '../route';
+import { stepWeek, weekKey, weekLabel, weekStops } from '../weeks';
 
 function nextIn(sb: EspnScoreboard): number | null {
   if (SNAPSHOT) return null;
@@ -18,18 +18,26 @@ function nextIn(sb: EspnScoreboard): number | null {
 }
 
 export function Scoreboard() {
-  const [ref, setRef] = useState<WeekRef | undefined>(undefined);
-  const key = ref ? `${ref.season}-${ref.seasonType}-${ref.week}` : 'current';
+  // The browsed week lives in the route, so it survives opening a game and is in the link.
+  const routed = useBoardWeek();
+  const ref = SNAPSHOT ? undefined : routed;
+  const key = ref ? weekKey(ref) : 'current';
   const poll = usePoll(key, (s) => getScoreboard(ref, s), nextIn);
   const sb = poll.data;
 
   const week = sb?.week?.number;
   const season = sb?.season;
-  const step = (d: number) => {
-    if (!season || week == null) return;
-    const w = week + d;
-    if (w < 1 || w > 18) return;
-    setRef({ season: season.year, seasonType: season.type, week: w });
+  const stops = weekStops(sb);
+  const label = season && week != null ? weekLabel(stops, season.type, week) : null;
+  const neighbour = (d: 1 | -1): WeekRef | null => {
+    if (!season || week == null) return null;
+    const s = stepWeek(stops, season.type, week, d);
+    return s ? { season: season.year, seasonType: s.seasonType, week: s.week } : null;
+  };
+  const next = neighbour(1);
+  const step = (d: 1 | -1) => {
+    const to = neighbour(d);
+    if (to) setBoardWeek(to);
   };
 
   const live = sb?.events.filter((e) => e.status.type.state === 'in') ?? [];
@@ -49,7 +57,7 @@ export function Scoreboard() {
               ‹
             </button>
           )}
-          {week != null ? `Week ${week}` : '…'}
+          {label ?? '…'}
           {!SNAPSHOT && (
             <button class="week-step" onClick={() => step(1)} aria-label="Next week">
               ›
@@ -69,9 +77,14 @@ export function Scoreboard() {
       {!sb && !poll.error && <p class="empty">Loading the week…</p>}
       {sb && sb.events.length === 0 && <p class="empty">No games this week.</p>}
       {/* ESPN's week runs Wednesday to Tuesday, so Monday night still shows the week that just ended. */}
-      {!SNAPSHOT && !ref && sb && sb.events.length > 0 && live.length === 0 && pre.length === 0 && week != null && week < 18 && (
+      {!SNAPSHOT && !ref && sb && sb.events.length > 0 && live.length === 0 && pre.length === 0 && label && next && (
         <button class="week-next" onClick={() => step(1)}>
-          All of week {week} is final. Week {week + 1} →
+          All of {label} is final. {weekLabel(stops, next.seasonType, next.week)} →
+        </button>
+      )}
+      {ref && (
+        <button class="week-next" onClick={() => setBoardWeek(undefined)}>
+          ← Back to this week
         </button>
       )}
       <div class="sb-list">

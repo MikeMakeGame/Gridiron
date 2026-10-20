@@ -79,6 +79,8 @@ export interface EspnEvent {
 export interface EspnScoreboard {
   week?: { number: number };
   season?: { year: number; type: number };
+  /** The season's calendar: per season type ("2" regular, "3" postseason), its weeks and their labels. */
+  leagues?: { calendar?: { value: string; label?: string; entries?: { value: string; label: string }[] }[] }[];
   events: EspnEvent[];
 }
 

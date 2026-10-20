@@ -9,7 +9,7 @@ import { agoText, smallLogo, teamVars } from '../format';
 import { useNow, usePoll } from '../hooks/usePoll';
 import { Fresh } from './Fresh';
 import { Logo } from './Logo';
-import { linkTo } from '../route';
+import { boardHref, linkTo } from '../route';
 import { WpChart } from './WpChart';
 import { Drives } from './Drives';
 import { Numbers } from './Numbers';
@@ -138,12 +138,19 @@ export function GamePage({ id }: { id: string }) {
   useEffect(() => {
     if (g) document.title = `${g.away.abbr} ${g.away.score} – ${g.home.abbr} ${g.home.score} · Gridiron`;
   }, [g?.away.score, g?.home.score, g?.id]);
+  // Leaving the game puts the plain title back, so the scoreboard's tab doesn't show a stale score.
+  useEffect(
+    () => () => {
+      document.title = 'Gridiron';
+    },
+    [],
+  );
 
   if (!g) {
     return (
       <div class="app view-game">
         <header class="scorebar">
-          <a class="back" href="#/" onClick={linkTo(null)}>
+          <a class="back" href={boardHref()} onClick={linkTo(null)} aria-label="All games">
             ‹
           </a>
         </header>
@@ -164,7 +171,7 @@ export function GamePage({ id }: { id: string }) {
   return (
     <div class="app view-game">
       <header class="scorebar">
-        <a class="back" href="#/" onClick={linkTo(null)} aria-label="All games">
+        <a class="back" href={boardHref()} onClick={linkTo(null)} aria-label="All games">
           ‹
         </a>
         <TeamCell t={withScore(g.away, ahead?.away)} poss={poss === g.away.id} tos={g.situation?.awayTimeouts ?? null} />
