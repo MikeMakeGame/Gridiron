@@ -477,7 +477,7 @@ img { display: block; }
   font: 700 13px/1 var(--disp); letter-spacing: .14em; text-transform: uppercase;
 }
 .theme-switch:hover { color: var(--tx); }
-.theme-glyph { width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor; background: linear-gradient(90deg, currentColor 50%, transparent 50%); }
+.theme-glyph { font: 400 17px/1 var(--body); }
 .footer { padding: 24px var(--pad) 20px; }
 .footer-line { font-size: 13px; line-height: 1.5; color: var(--tx2); margin-bottom: 8px; }
 .footer a { color: var(--tx2); text-decoration: underline; text-underline-offset: 2px; }

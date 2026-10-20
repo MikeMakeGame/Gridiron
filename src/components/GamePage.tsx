@@ -368,7 +368,9 @@ function numbersHeadline(g: Game, epReady: boolean): string {
   const H = teamNumbers(g, g.home);
   if (epReady && A.epaPerPlay != null && H.epaPerPlay != null)
     return `EPA est. ${g.away.abbr} ${signed(A.epaPerPlay, 2)} · ${g.home.abbr} ${signed(H.epaPerPlay, 2)}`;
-  return `Success ${g.away.abbr} ${pct(A.successRate)} · ${g.home.abbr} ${pct(H.successRate)}`;
+  // A team without a snap yet says so in words; a bare dash beside a name reads like a minus sign.
+  const side = (abbr: string, v: number | null) => (v == null ? `${abbr} no snaps yet` : `${abbr} ${pct(v)}`);
+  return `Success ${side(g.away.abbr, A.successRate)} · ${side(g.home.abbr, H.successRate)}`;
 }
 
 function drivesHeadline(g: Game): string | null {

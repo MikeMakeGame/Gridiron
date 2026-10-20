@@ -133,7 +133,10 @@ function ThemeSwitch() {
   const to = theme === 'day' ? 'night' : 'day';
   return (
     <button class="theme-switch" onClick={() => setTheme(to)} aria-label={`Switch to the ${to} look`} title={`${to === 'day' ? 'Day: high contrast for sunlight' : 'Night: dark, the default'}`}>
-      <span class="theme-glyph" aria-hidden="true" />
+      {/* names the look it switches to: a sun to go to day, a moon to go back to night */}
+      <span class="theme-glyph" aria-hidden="true">
+        {to === 'day' ? '☀' : '☾'}
+      </span>
       {to === 'day' ? 'Day' : 'Night'}
     </button>
   );
