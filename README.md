@@ -18,9 +18,27 @@ A phone-first live NFL viewer with no ads. One scroll per game: score, the situa
 
 ## Live EPA, estimated, and how good the estimate is
 
-nflverse's EPA arrives the morning after. During the game this page estimates it: `scripts/nflverse_build.py` bakes an expected-points table (down x distance x yard line, 4 seasons of nflfastR's own EP), and each snap's EPA is EP after minus EP before (TD = 7, FG = 3, safety = -2, turnovers flip the sign).
+nflverse's EPA arrives the morning after. During the game this page estimates it: `scripts/nflverse_build.py` bakes an expected-points table (down x distance x yard line, from nflfastR's own EP over 2022-2025), and each scrimmage snap's EPA is EP after minus EP before (TD = 7, safety = -2, a change of possession flips the sign).
 
-`scripts/calibrate.ts` runs the page's own code over ESPN's play-by-play for every finished game of the season and compares each team's EPA/play with nflverse's. On 2026 weeks 1-6 (92 games, 184 team-games): mean error 0.04 per play, 90% within 0.08, bias -0.005. The page prints that line under the numbers.
+`scripts/calibrate.ts` runs the page's own code over ESPN's play-by-play for every finished game of the season, stops at the end of Q1, Q2, Q3 and the final, and compares each team's EPA/play so far with nflverse's for the same quarters. The EP table is built from 2022-2025 only, so 2026 games are unseen. On 2026 weeks 1-6 (92 games, 184 team-games):
+
+| Checked at | Mean miss | 90% within | Guess-the-average baseline |
+|---|---|---|---|
+| End of Q1 | 0.067 | 0.134 | 0.313 |
+| Halftime | 0.053 | 0.118 | 0.194 |
+| End of Q3 | 0.049 | 0.110 | 0.174 |
+| Final | 0.040 | 0.085 | 0.154 |
+
+Single plays are rougher (0.15 mean miss per play); the team number is the one to trust. The page prints the final and halftime figures under the number.
+
+## What the live feed actually does (Monday Night Football, 10-19)
+
+`scripts/live-probe.ts` logged the game summary every 20 s for the whole game; `scripts/probe-report.ts` summarizes the log.
+
+- ESPN's game summary has **no `situation` block** during a live game, and no timeouts anywhere in it. The page takes down & distance from the latest play and timeouts from the scoreboard feed (polled every 30 s while the game is live).
+- Plays appear in the feed about a minute after the snap (median ~55 s from ESPN's own `wallclock`, including our poll gap).
+- The header clock only moves when a play is posted.
+- No score ever went backwards during the live game (it does happen in finished games' rows; see `buildGame`).
 
 ## Run it
 
@@ -46,7 +64,7 @@ A Claude artifact can't fetch ESPN, so it gets a snapshot: `npx tsx scripts/snap
 
 ### Hosting (GitHub Pages)
 
-`.github/workflows/pages.yml` builds on push and every morning at 4:30 AM Pacific (after nflverse posts the night's games), then publishes to Pages. ESPN sends `Access-Control-Allow-Origin: *`, so each visitor's browser reads ESPN directly; the site itself is static.
+`.github/workflows/pages.yml` builds on push and twice a day (18:00 and 06:00 UTC; nflverse's 2026 file was updated at 16:28 UTC on Monday 10-19), then publishes to Pages. ESPN sends `Access-Control-Allow-Origin: *`, so each visitor's browser reads ESPN directly; the site itself is static.
 
 ## Data and terms
 
