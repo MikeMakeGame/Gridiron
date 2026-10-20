@@ -8,7 +8,7 @@ A personal, non-commercial project. Not affiliated with ESPN, the NFL or any tea
 
 ## What it shows
 
-- **Scoreboard**: every game of the week, live ones first, with down & distance and a win-probability bar. Polls every 15 s while a game is live. The arrows step through the regular season and on into the playoffs, using ESPN's own calendar; a browsed week stays in the link (`#/w/2026-3-1` is the Wild Card round) and survives opening a game.
+- **Scoreboard**: every game of the week, live ones first, with down & distance and a win-probability bar. ESPN is polled only while a game is live (every 15 s; 30 s at halftime). Before kickoff, after the final, or in a week with nothing on, the page fetches once and then only when you tap the freshness pill. The arrows step through the regular season and on into the playoffs, using ESPN's own calendar; a browsed week stays in the link (`#/w/2026-3-1` is the Wild Card round) and survives opening a game.
 - **Game page**
   - sticky score bar with a freshness pill ("7s ago": green under 30 s, amber past 45 s, red past 2 min; tap to refetch)
   - situation, last play with its WP swing and its estimated EPA
@@ -73,7 +73,7 @@ For a host that blocks network access: `npx tsx scripts/snapshot.ts` freezes thi
 npm test
 ```
 
-The polling engine (`src/hooks/poller.ts`) runs under fake timers: a hung request recovers, errors never poll faster than the normal schedule, ESPN's Retry-After holds against a manual refresh and a returning tab, a game opened before kickoff picks up when it goes live, and a malformed answer never replaces good data. One cooldown covers the whole tab: once ESPN pushes back, no poller asks again until the wait is over. Play-classification tests cover kneels, spikes, flags that wipe out a play, muffed punts and safeties. Week tests cover stepping from week 18 into the playoffs and back, both ends of the season, and the week link.
+The polling engine (`src/hooks/poller.ts`) runs under fake timers: a hung request recovers, errors never poll faster than the normal schedule, ESPN's Retry-After holds against a manual refresh and a returning tab, a view with nothing live is fetched once and then only on a tap, and a malformed answer never replaces good data. One cooldown covers the whole tab: once ESPN pushes back, no poller asks again until the wait is over. Play-classification tests cover kneels, spikes, flags that wipe out a play, muffed punts and safeties. Week tests cover stepping from week 18 into the playoffs and back, both ends of the season, and the week link.
 
 ### Hosting (GitHub Pages)
 

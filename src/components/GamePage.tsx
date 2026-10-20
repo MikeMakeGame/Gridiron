@@ -1,6 +1,7 @@
 // One game, one scroll: score bar, now, drives, numbers, players, post-game model numbers.
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { getEpTable, getScoreboardForDay, getSummary, SNAPSHOT } from '../espn/api';
+import { gameInterval } from '../espn/cadence';
 import { buildGame, periodLabel, type Game, type TeamInfo } from '../espn/model';
 import { biggestPlays, possessionsLeft } from '../stats/live';
 import type { EspnSummary } from '../espn/types';
@@ -18,31 +19,28 @@ import { Advanced } from './Advanced';
 import { Epa, offenseAbbr, WpDelta } from './Badges';
 import { Footer } from './Scoreboard';
 
-/** How often to check a game in this state: often while live, slowly before kickoff, never once it's final. */
-export function pollInterval(state: 'pre' | 'in' | 'post', statusName: string, kickoffIso: string, now = Date.now()): number | null {
-  if (SNAPSHOT || state === 'post') return null;
-  if (state === 'pre') return new Date(kickoffIso).getTime() - now < 30 * 60_000 ? 60_000 : 300_000;
-  if (statusName === 'STATUS_HALFTIME' || statusName === 'STATUS_END_PERIOD') return 30_000;
-  return 15_000;
+/** Poll only while the game is live (see ../espn/cadence); the offline snapshot never polls. */
+function pollInterval(state: 'pre' | 'in' | 'post', statusName: string): number | null {
+  return SNAPSHOT ? null : gameInterval(state, statusName);
 }
 
 function nextIn(s: EspnSummary): number | null {
   const c = s.header.competitions[0];
-  return pollInterval(c.status.type.state, c.status.type.name, c.date);
+  return pollInterval(c.status.type.state, c.status.type.name);
 }
 
 export function GamePage({ id }: { id: string }) {
   const poll = usePoll(`g${id}`, (s) => getSummary(id, s), nextIn);
   // The scoreboard feed carries the timeouts, and it posts each new snap 10-20 s before the game summary
   // does (measured on MNF 10-19). It's the scoreboard for the game's own day, so it works for any week, and it
-  // follows the game: slow before kickoff, every 15 s live, off at the final.
+  // follows the game: polled only while the game is live.
   const kickoff = poll.data?.header.competitions[0].date ?? '';
   const sb = usePoll(
     `sb${id}-${kickoff}`,
     (s) => getScoreboardForDay(kickoff, s),
     (d) => {
       const e = d.events.find((x) => x.id === id);
-      return e ? pollInterval(e.status.type.state, e.status.type.name, e.date) : null;
+      return e ? pollInterval(e.status.type.state, e.status.type.name) : null;
     },
     !!kickoff && !SNAPSHOT,
   );

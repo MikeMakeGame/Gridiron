@@ -9,7 +9,14 @@ const sb: EspnScoreboard = {
   leagues: [
     {
       calendar: [
-        { value: '1', label: 'Preseason', entries: [{ value: '1', label: 'Hall of Fame Weekend' }] },
+        {
+          value: '1',
+          label: 'Preseason',
+          entries: [
+            { value: '1', label: 'Hall of Fame Weekend' },
+            { value: '2', label: 'Preseason Week 1' },
+          ],
+        },
         { value: '2', label: 'Regular Season', entries: Array.from({ length: 18 }, (_, i) => ({ value: String(i + 1), label: `Week ${i + 1}` })) },
         {
           value: '3',
@@ -35,10 +42,16 @@ describe('weeks', () => {
     expect(stepWeek(stops, 3, 1, -1)).toEqual({ seasonType: 2, week: 18, label: 'Week 18' });
   });
 
-  it('stops at week 1 and at the Super Bowl, and skips the preseason', () => {
-    expect(stepWeek(stops, 2, 1, -1)).toBeNull();
+  it('steps back from week 1 into the preseason, and stops at both ends of the season', () => {
+    expect(stepWeek(stops, 2, 1, -1)).toEqual({ seasonType: 1, week: 2, label: 'Preseason 1' });
+    expect(stepWeek(stops, 1, 1, -1)).toBeNull();
     expect(stepWeek(stops, 3, 4, 1)).toBeNull();
-    expect(stops.some((s) => s.seasonType === 1)).toBe(false);
+    expect(weekLabel(stops, 1, 1)).toBe('Hall of Fame');
+  });
+
+  it("gives no arrows off the calendar (a week ESPN doesn't know)", () => {
+    expect(stepWeek(stops, 2, 99, 1)).toBeNull();
+    expect(stepWeek(stops, 2, 99, -1)).toBeNull();
   });
 
   it('keeps playoff labels short enough for the top bar', () => {
@@ -52,12 +65,15 @@ describe('weeks', () => {
     expect(plain).toHaveLength(18);
     expect(stepWeek(plain, 2, 18, 1)).toBeNull();
     expect(weekLabel(plain, 2, 7)).toBe('Week 7');
+    expect(weekLabel(plain, 3, 1)).toBe('Playoffs 1');
   });
 
   it('round-trips a week through the link, and rejects junk', () => {
     const ref = { season: 2026, seasonType: 3, week: 1 };
     expect(parseWeekKey(weekKey(ref))).toEqual(ref);
     expect(parseWeekKey('2026-9-1')).toBeUndefined();
+    expect(parseWeekKey('2026-4-1')).toBeUndefined(); // the offseason has no weeks
+    expect(parseWeekKey('2026-2-0')).toBeUndefined();
     expect(parseWeekKey('../../x')).toBeUndefined();
   });
 });

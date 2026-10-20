@@ -100,6 +100,7 @@ img { display: block; }
 .brand::before { content: ""; width: 10px; height: 18px; background: var(--tx); clip-path: polygon(0 0, 100% 0, 100% 62%, 0 100%); }
 .week { margin-left: auto; display: flex; align-items: center; font-weight: 500; font-size: 15px; letter-spacing: .1em; text-transform: uppercase; color: var(--tx2); white-space: nowrap; }
 .week-step { width: 34px; height: 34px; font: 500 22px/1 var(--disp); color: var(--tx); text-align: center; }
+.week-step:disabled { color: var(--tx3); opacity: .35; }
 .week-next {
   display: block; width: 100%; margin: 14px 0 0; padding: 11px 12px;
   font: 700 14px/1.2 var(--disp); letter-spacing: .1em; text-transform: uppercase; text-align: left;

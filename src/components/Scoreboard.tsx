@@ -1,5 +1,6 @@
 // All games of a week, live ones first.
 import { getScoreboard, SNAPSHOT, type WeekRef } from '../espn/api';
+import { boardInterval } from '../espn/cadence';
 import type { EspnEvent, EspnScoreboard } from '../espn/types';
 import { clockLabel, teamInfo, type TeamInfo } from '../espn/model';
 import { kickoffText, smallLogo, teamVars } from '../format';
@@ -9,13 +10,8 @@ import { Logo } from './Logo';
 import { linkTo, setBoardWeek, useBoardWeek } from '../route';
 import { stepWeek, weekKey, weekLabel, weekStops } from '../weeks';
 
-function nextIn(sb: EspnScoreboard): number | null {
-  if (SNAPSHOT) return null;
-  const states = sb.events.map((e) => e.status.type.state);
-  if (states.includes('in')) return 15_000;
-  const soon = sb.events.some((e) => e.status.type.state === 'pre' && new Date(e.date).getTime() - Date.now() < 30 * 60_000);
-  return soon ? 60_000 : 300_000;
-}
+// Poll only while a listed game is live (see ../espn/cadence); otherwise one fetch, and the pill refetches on a tap.
+const nextIn = (sb: EspnScoreboard): number | null => (SNAPSHOT ? null : boardInterval(sb));
 
 export function Scoreboard() {
   // The browsed week lives in the route, so it survives opening a game and is in the link.
@@ -28,12 +24,15 @@ export function Scoreboard() {
   const week = sb?.week?.number;
   const season = sb?.season;
   const stops = weekStops(sb);
-  const label = season && week != null ? weekLabel(stops, season.type, week) : null;
+  // ESPN answers a week it doesn't know with an empty board and no week: label it from the link instead of "…".
+  const label =
+    season && week != null ? weekLabel(stops, season.type, week) : ref && sb ? weekLabel(stops, ref.seasonType, ref.week) : null;
   const neighbour = (d: 1 | -1): WeekRef | null => {
     if (!season || week == null) return null;
     const s = stepWeek(stops, season.type, week, d);
     return s ? { season: season.year, seasonType: s.seasonType, week: s.week } : null;
   };
+  const prev = neighbour(-1);
   const next = neighbour(1);
   const step = (d: 1 | -1) => {
     const to = neighbour(d);
@@ -53,13 +52,13 @@ export function Scoreboard() {
         <span class="brand">Gridiron</span>
         <span class="week">
           {!SNAPSHOT && (
-            <button class="week-step" onClick={() => step(-1)} aria-label="Previous week">
+            <button class="week-step" onClick={() => step(-1)} disabled={!prev} aria-label="Previous week">
               ‹
             </button>
           )}
           {label ?? '…'}
           {!SNAPSHOT && (
-            <button class="week-step" onClick={() => step(1)} aria-label="Next week">
+            <button class="week-step" onClick={() => step(1)} disabled={!next} aria-label="Next week">
               ›
             </button>
           )}

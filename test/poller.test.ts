@@ -156,7 +156,7 @@ describe('Poller', () => {
     p.stop();
   });
 
-  it('follows a game from before kickoff into the live game, and stops at the final', async () => {
+  it('follows whatever schedule the data asks for, and stops when it says so', async () => {
     const states = ['pre', 'pre', 'in', 'in', 'post'];
     const { p, rec } = setup(
       states.map((s) => ok(s)),
