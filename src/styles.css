@@ -213,7 +213,7 @@ img { display: block; }
 .wp-mid { stroke: var(--tx3); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
 .wp-line { fill: none; stroke: var(--tx); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .wp-now { fill: var(--tx); stroke: var(--tx); stroke-opacity: .5; stroke-width: 0; }
-.wp-label { font: 700 11px var(--disp); letter-spacing: .14em; fill: var(--ta); }
+.wp-label { font: 700 11px var(--disp); letter-spacing: .14em; fill: var(--ta); paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
 .wp-label, .wp-now-label { --ta: var(--tc, #9aa3ad); }
 @supports (color: oklch(from red l c h)) { .wp-now-label { --ta: oklch(from var(--tc, #9aa3ad) max(l, .64) calc(c * 1.35) h); } }
 .wp-now-label { font: 700 14px var(--disp); letter-spacing: .06em; fill: var(--ta); paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }

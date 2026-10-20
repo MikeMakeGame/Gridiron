@@ -1,6 +1,10 @@
 # Gridiron
 
-A phone-first live NFL viewer with no ads. One scroll per game: score, the situation, the last play and how much it swung win probability, a whole-game WP chart, the current drive, the numbers that say how each team is actually playing, a drive chart, then the box score.
+A phone-first live NFL viewer with no ads and no betting lines. One scroll per game: score, the situation, the last play and how much it swung win probability, a whole-game WP chart, the current drive, the numbers that say how each team is actually playing, a drive chart, then the box score.
+
+Live at https://mikemakegame.github.io/Gridiron/ (GitHub Pages; add it to your phone's home screen).
+
+A personal, non-commercial project. Not affiliated with ESPN, the NFL or any team.
 
 ## What it shows
 
@@ -64,12 +68,27 @@ A Claude artifact can't fetch ESPN, so it gets a snapshot: `npx tsx scripts/snap
 
 ### Hosting (GitHub Pages)
 
-`.github/workflows/pages.yml` builds on push and twice a day (18:00 and 06:00 UTC; nflverse's 2026 file was updated at 16:28 UTC on Monday 10-19), then publishes to Pages. ESPN sends `Access-Control-Allow-Origin: *`, so each visitor's browser reads ESPN directly; the site itself is static.
+`.github/workflows/pages.yml` builds on push and twice a day (18:00 and 06:00 UTC; nflverse's 2026 file was updated at 16:28 UTC on Monday 10-19), then publishes to Pages. ESPN sends `Access-Control-Allow-Origin: *`, so each visitor's browser reads ESPN directly; the site itself is static. The build uses relative paths, so it works at any Pages sub-path.
+
+First-time setup, from the repo root with `gh` logged in (enable Pages before the first push, so the first workflow run can deploy):
+
+```bash
+gh repo create MikeMakeGame/Gridiron --public --source . --remote origin
+```
+
+```bash
+gh api -X POST repos/MikeMakeGame/Gridiron/pages -f build_type=workflow
+```
+
+```bash
+git push -u origin main
+```
 
 ## Data and terms
 
 - **Live data**: ESPN's unofficial `site.api.espn.com` JSON. Undocumented, can change without notice, and ESPN's terms don't grant this use: keep it personal, keep polling polite (15 s while live and visible, paused when the tab is hidden, backs off on errors).
-- **Advanced stats**: [nflverse](https://github.com/nflverse/nflverse-data) play-by-play (nflfastR models), CC-BY 4.0. Credit stays in the footer.
+- **Advanced stats**: [nflverse](https://github.com/nflverse/nflverse-data) play-by-play (nflfastR models), CC-BY 4.0. Credit stays in the app's footer. The repo doesn't store the derived data; the workflow rebuilds it.
+- **Code**: MIT (see `LICENSE`), which covers the code only, not ESPN's data, nflverse's data, or team names and logos.
 
 ## Layout
 

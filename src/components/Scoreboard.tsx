@@ -129,7 +129,8 @@ function TeamRow({ t, st, poss, winner }: { t: TeamInfo; st: string; poss: boole
 export function Footer() {
   return (
     <footer class="footer">
-      Live data: ESPN (unofficial, personal use). Advanced stats: nflverse / nflfastR, CC-BY 4.0. No ads, no tracking.
+      Live data: ESPN (unofficial, personal use). Advanced stats: nflverse / nflfastR, CC-BY 4.0. No ads, no tracking. Not affiliated
+      with ESPN, the NFL or any team.
     </footer>
   );
 }

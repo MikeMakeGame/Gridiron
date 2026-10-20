@@ -55,19 +55,29 @@ export function GamePage({ id }: { id: string }) {
   const g = useMemo(() => (poll.data && replay != null ? buildGame(poll.data, { ep, upto: replay }) : full), [poll.data, ep, replay, full]);
 
   // A snap the scoreboard already has and the summary doesn't yet: shown on top, labelled, until the summary catches up.
+  // Play ids match across the two feeds (checked on MNF 10-19). A snap the summary never posts (a reversed play)
+  // stops showing after 90 s.
+  const aheadSince = useRef<{ id: string; at: number } | null>(null);
   const ahead = useMemo(() => {
     const lp = sbSit?.lastPlay;
     if (!g || replay != null || g.state !== 'in' || !sbSit || !lp?.id || !((sbSit.down ?? 0) > 0)) return null;
     if (/timeout|end of|end period|two-minute|coin toss/i.test(`${lp.type?.text ?? ''} ${lp.text ?? ''}`)) return null;
     if (g.plays.some((p) => p.id === lp.id)) return null;
+    if (aheadSince.current?.id !== lp.id) aheadSince.current = { id: lp.id, at: Date.now() };
+    if (Date.now() - aheadSince.current.at > 90_000) return null;
+    const ev = sb.data?.events.find((e) => e.id === id)?.competitions[0].competitors;
+    const scoreOf = (side: 'home' | 'away') => Number(ev?.find((c) => c.homeAway === side)?.score ?? NaN);
     return {
       text: lp.text ?? '',
       situation: [sbSit.shortDownDistanceText, sbSit.possessionText].filter(Boolean).join(' · '),
       redZone: !!sbSit.isRedZone,
       possession: sbSit.possession ?? null,
       wpHome: lp.probability?.homeWinPercentage ?? null,
+      // The score bar follows the newer feed too, so a just-in touchdown and the score agree.
+      home: scoreOf('home'),
+      away: scoreOf('away'),
     };
-  }, [sbSit, g, replay]);
+  }, [sbSit, g, replay, sb.data]);
 
   // Plays that arrived since the last poll get a one-shot highlight (never on first load or in replay scrubbing).
   const seen = useRef<Set<string> | null>(null);
@@ -110,8 +120,6 @@ export function GamePage({ id }: { id: string }) {
   const live = g.state === 'in';
   const canReplay = full?.state === 'post' && full.plays.length > 0;
   const poss = ahead?.possession ?? g.situation?.possessionId;
-  const lastWp = g.wpPoints.length ? g.wpPoints[g.wpPoints.length - 1].home : null;
-  const aheadSwing = ahead?.wpHome != null && lastWp != null ? ahead.wpHome - lastWp : 0;
   const lastSnap = [...g.plays].reverse().find((p) => p.kind !== 'kick' || g.plays.length < 3) ?? g.lastPlay;
   const pivot = g.state === 'post' && !g.truncated ? biggestPlays(g, 1)[0] ?? null : null;
   const headline = pivot ?? lastSnap;
@@ -124,7 +132,7 @@ export function GamePage({ id }: { id: string }) {
         <a class="back" href="#/" onClick={linkTo(null)} aria-label="All games">
           ‹
         </a>
-        <TeamCell t={g.away} poss={poss === g.away.id} tos={g.situation?.awayTimeouts ?? null} />
+        <TeamCell t={withScore(g.away, ahead?.away)} poss={poss === g.away.id} tos={g.situation?.awayTimeouts ?? null} />
         <div class="sbar-mid">
           <div class="clock">{g.clockText}</div>
           {replay != null ? (
@@ -135,7 +143,7 @@ export function GamePage({ id }: { id: string }) {
             <Fresh live={live} lastOk={poll.lastOk} polling={poll.polling} error={poll.error} onRefresh={poll.refresh} />
           )}
         </div>
-        <TeamCell t={g.home} poss={poss === g.home.id} tos={g.situation?.homeTimeouts ?? null} />
+        <TeamCell t={withScore(g.home, ahead?.home)} poss={poss === g.home.id} tos={g.situation?.homeTimeouts ?? null} />
       </header>
 
       {canReplay && (
@@ -180,14 +188,8 @@ export function GamePage({ id }: { id: string }) {
             <div class="lp-label">
               Last play<span class="lp-age"> · just in, details to follow</span>
             </div>
+            {/* No swing badge here: the summary may be several plays behind, so a difference would span them all. */}
             <div class="lp-text">{ahead.text}</div>
-            <div class="play-badges">
-              {Math.abs(aheadSwing) >= 0.005 && (
-                <span class={`wpd${Math.abs(aheadSwing) >= 0.1 ? ' big' : ''}`} style={teamVars(aheadSwing > 0 ? g.home : g.away)}>
-                  {(aheadSwing > 0 ? g.home : g.away).abbr} +{(Math.abs(aheadSwing) * 100).toFixed(1)}%
-                </span>
-              )}
-            </div>
           </div>
         ) : headline && (
           <div class="lastplay">
@@ -232,7 +234,12 @@ export function GamePage({ id }: { id: string }) {
 
 function possessionsText(n: number): string {
   const k = Math.max(1, Math.round(n));
-  return `≈${k} possession${k === 1 ? '' : 's'} left`;
+  return `≈${k} possession${k === 1 ? '' : 's'} left, both teams`;
+}
+
+// The newer feed's score wins while it's ahead; never lower than what the play-by-play already shows.
+function withScore(t: TeamInfo, s: number | undefined): TeamInfo {
+  return s != null && Number.isFinite(s) && s > t.score ? { ...t, score: s } : t;
 }
 
 function TeamCell({ t, poss, tos }: { t: TeamInfo; poss: boolean; tos: number | null }) {
