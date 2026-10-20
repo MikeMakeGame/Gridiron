@@ -1,0 +1,13 @@
+{
+  "name": "Gridiron",
+  "short_name": "Gridiron",
+  "description": "Live NFL scores, drives, win probability and EPA. No ads.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#050607",
+  "theme_color": "#050607",
+  "icons": [
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
