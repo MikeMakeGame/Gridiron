@@ -20,9 +20,8 @@ export function Advanced({ g }: { g: Game }) {
   if (!adv) {
     return (
       <p class="empty">
-        {g.state === 'post'
-          ? 'nflverse posts the model numbers overnight; they show here once the nightly build picks them up.'
-          : 'Model numbers (EPA, CPOE, pass rate over expected) arrive the morning after the game.'}
+        nflverse's model numbers (EPA, CPOE, pass rate over expected) for this game arrive the morning after it; until then
+        the live estimate above stands in.
       </p>
     );
   }
