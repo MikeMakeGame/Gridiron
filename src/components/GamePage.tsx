@@ -31,11 +31,12 @@ function nextIn(s: EspnSummary): number | null {
 
 export function GamePage({ id }: { id: string }) {
   const poll = usePoll(`g${id}`, (s) => getSummary(id, s), nextIn);
-  // Timeouts live only in the scoreboard feed; check it every 30 s while this game is on.
+  // The scoreboard feed carries the timeouts, and it posts each new snap 10-20 s before the game summary
+  // does (measured on MNF 10-19), so it's polled alongside while this game is on.
   const sb = usePoll(
     `sb${id}`,
     (s) => getScoreboard(undefined, s),
-    (d) => (!SNAPSHOT && d.events.find((e) => e.id === id)?.status.type.state === 'in' ? 30_000 : null),
+    (d) => (!SNAPSHOT && d.events.find((e) => e.id === id)?.status.type.state === 'in' ? 15_000 : null),
   );
   const sbSit = sb.data?.events.find((e) => e.id === id)?.competitions[0].situation;
   const timeouts = useMemo(
@@ -52,6 +53,21 @@ export function GamePage({ id }: { id: string }) {
 
   const full = useMemo(() => (poll.data ? buildGame(poll.data, { ep, timeouts }) : null), [poll.data, ep, timeouts]);
   const g = useMemo(() => (poll.data && replay != null ? buildGame(poll.data, { ep, upto: replay }) : full), [poll.data, ep, replay, full]);
+
+  // A snap the scoreboard already has and the summary doesn't yet: shown on top, labelled, until the summary catches up.
+  const ahead = useMemo(() => {
+    const lp = sbSit?.lastPlay;
+    if (!g || replay != null || g.state !== 'in' || !sbSit || !lp?.id || !((sbSit.down ?? 0) > 0)) return null;
+    if (/timeout|end of|end period|two-minute|coin toss/i.test(`${lp.type?.text ?? ''} ${lp.text ?? ''}`)) return null;
+    if (g.plays.some((p) => p.id === lp.id)) return null;
+    return {
+      text: lp.text ?? '',
+      situation: [sbSit.shortDownDistanceText, sbSit.possessionText].filter(Boolean).join(' · '),
+      redZone: !!sbSit.isRedZone,
+      possession: sbSit.possession ?? null,
+      wpHome: lp.probability?.homeWinPercentage ?? null,
+    };
+  }, [sbSit, g, replay]);
 
   // Plays that arrived since the last poll get a one-shot highlight (never on first load or in replay scrubbing).
   const seen = useRef<Set<string> | null>(null);
@@ -93,7 +109,9 @@ export function GamePage({ id }: { id: string }) {
 
   const live = g.state === 'in';
   const canReplay = full?.state === 'post' && full.plays.length > 0;
-  const poss = g.situation?.possessionId;
+  const poss = ahead?.possession ?? g.situation?.possessionId;
+  const lastWp = g.wpPoints.length ? g.wpPoints[g.wpPoints.length - 1].home : null;
+  const aheadSwing = ahead?.wpHome != null && lastWp != null ? ahead.wpHome - lastWp : 0;
   const lastSnap = [...g.plays].reverse().find((p) => p.kind !== 'kick' || g.plays.length < 3) ?? g.lastPlay;
   const pivot = g.state === 'post' && !g.truncated ? biggestPlays(g, 1)[0] ?? null : null;
   const headline = pivot ?? lastSnap;
@@ -150,14 +168,28 @@ export function GamePage({ id }: { id: string }) {
 
       <section class="section" id="now">
         {g.state === 'pre' && <Pregame g={g} />}
-        {g.situation && g.situation.text && (
-          <div class={`situation${g.situation.redZone ? ' is-redzone' : ''}`}>
-            <span class="sit-text">{g.situation.text}</span>
-            {g.situation.redZone && <span class="sit-extra">Red zone</span>}
+        {(ahead?.situation || (g.situation && g.situation.text)) && (
+          <div class={`situation${(ahead ? ahead.redZone : g.situation?.redZone) ? ' is-redzone' : ''}`}>
+            <span class="sit-text">{ahead?.situation || g.situation?.text}</span>
+            {(ahead ? ahead.redZone : g.situation?.redZone) && <span class="sit-extra">Red zone</span>}
             {possLeft != null && possLeft < 6 && <span class="sit-extra">{possessionsText(possLeft)}</span>}
           </div>
         )}
-        {headline && (
+        {ahead ? (
+          <div class="lastplay">
+            <div class="lp-label">
+              Last play<span class="lp-age"> · just in, details to follow</span>
+            </div>
+            <div class="lp-text">{ahead.text}</div>
+            <div class="play-badges">
+              {Math.abs(aheadSwing) >= 0.005 && (
+                <span class={`wpd${Math.abs(aheadSwing) >= 0.1 ? ' big' : ''}`} style={teamVars(aheadSwing > 0 ? g.home : g.away)}>
+                  {(aheadSwing > 0 ? g.home : g.away).abbr} +{(Math.abs(aheadSwing) * 100).toFixed(1)}%
+                </span>
+              )}
+            </div>
+          </div>
+        ) : headline && (
           <div class="lastplay">
             <div class="lp-label">
               {pivot ? `Play of the game · ${periodLabel(pivot.period)} ${pivot.clock}` : live ? 'Last play' : 'Final play'}

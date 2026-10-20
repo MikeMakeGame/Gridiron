@@ -40,6 +40,7 @@ export interface EspnSituation {
   lastPlay?: {
     id?: string;
     text?: string;
+    type?: { text?: string };
     probability?: { homeWinPercentage?: number };
   };
 }
