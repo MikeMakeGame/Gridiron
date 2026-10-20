@@ -2,18 +2,24 @@
 // snapshot mode (the offline build) reads JSON bundled next to the page.
 import type { EspnScoreboard, EspnSummary } from './types';
 import type { EpTable } from '../stats/ep';
-import { RetryAfterError } from '../hooks/poller';
+import { RetryAfterError, parseRetryAfter } from '../hooks/poller';
 
 const ESPN = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl';
 export const SNAPSHOT = import.meta.env.MODE === 'snapshot';
 
+// One cooldown for the whole tab: when ESPN pushes back on any request, every poller waits it out, new ones too.
+let espnNotBefore = 0;
+const slowDown = (ms: number) => `ESPN asked us to slow down; trying again in ${Math.max(1, Math.round(ms / 60_000))} min`;
+
 async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
+  const early = espnNotBefore - Date.now();
+  if (early > 0) throw new RetryAfterError(slowDown(early), early); // no request goes out
   const r = await fetch(url, { signal });
   if (r.status === 429 || r.status === 503) {
-    // Slow down when asked: Retry-After in seconds (or an HTTP date), else five minutes.
-    const ra = r.headers.get('Retry-After');
-    const secs = ra == null ? NaN : /^\d+$/.test(ra) ? Number(ra) : (Date.parse(ra) - Date.now()) / 1000;
-    throw new RetryAfterError(`ESPN asked us to slow down (${r.status})`, Number.isFinite(secs) && secs > 0 ? secs * 1000 : 300_000);
+    // Slow down when asked: Retry-After in seconds (or an HTTP date), else five minutes; never over an hour.
+    const wait = parseRetryAfter(r.headers.get('Retry-After'), Date.now());
+    espnNotBefore = Math.max(espnNotBefore, Date.now() + wait);
+    throw new RetryAfterError(slowDown(wait), wait);
   }
   if (!r.ok) throw new Error(`ESPN answered ${r.status}`);
   return (await r.json()) as T;

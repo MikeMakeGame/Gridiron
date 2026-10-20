@@ -41,7 +41,7 @@ Team colors arrive as CSS custom properties on the element: `--tc` (primary hex,
 - `.players`: per-team blocks `.pl-team` with `--tc`; per category `table.pl-table` with `caption`, `th`, `td`; first column `.pl-name`.
 - `.adv` post-game nflverse block: same `.nums` grid + `.topplays` list of `.play`.
 - `.jumpbar`: fixed bottom bar of `button.jump` (Now, Drives, Numbers, Players); `.is-active`.
-- `.footer`: data credits ("Live data: ESPN (unofficial). Advanced: nflverse, CC-BY 4.0.").
+- `.footer`: data credits, with links to the nflverse data and its CC BY 4.0 license and a line on what Gridiron changed; `.footer a` underlined.
 - `.empty`, `.error` states (one line, centered).
 
 ## Motion

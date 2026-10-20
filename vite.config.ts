@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 import preact from '@preact/preset-vite';
 
@@ -13,4 +14,6 @@ export default defineConfig(({ mode }) => ({
     outDir: mode === 'snapshot' ? 'dist-snapshot' : 'dist',
     target: 'es2020',
   },
+  // Only the suite in test/; scratch copies under .cache/ never run.
+  test: { include: ['test/**/*.test.ts'] },
 }));

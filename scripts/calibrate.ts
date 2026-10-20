@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { buildGame } from '../src/espn/model';
 import { teamNumbers } from '../src/stats/live';
 import type { EpTable } from '../src/stats/ep';
-import { summary } from './espn-cache';
+import { BatchStopped, batchStopped, summary } from './espn-cache';
 
 const DATA = join(import.meta.dirname, '..', 'public', 'data');
 const ep: EpTable = JSON.parse(readFileSync(join(DATA, 'ep_table.json'), 'utf8'));
@@ -16,13 +16,16 @@ const CUTS = ['Q1', 'Q2', 'Q3', 'Final'] as const;
 
 type Row = { id: string; team: string; cut: (typeof CUTS)[number]; est: number; nflverse: number };
 const rows: Row[] = [];
+let notCached = 0;
 for (const f of files) {
   const adv = JSON.parse(readFileSync(join(DATA, 'games', f), 'utf8'));
   let s;
   try {
     s = await summary(adv.espn);
   } catch (e) {
-    console.error(`skip ${adv.espn}: ${e}`);
+    // Once ESPN pushes back, the run keeps going on cached games only: no further requests.
+    if (e instanceof BatchStopped) notCached++;
+    else console.error(`skip ${adv.espn}: ${e}`);
     continue;
   }
   const full = buildGame(s, { ep });
@@ -39,6 +42,7 @@ for (const f of files) {
   });
 }
 
+if (notCached) console.error(`calibrate: ${notCached} games left out: not cached, and the ESPN batch stopped (${batchStopped()})`);
 if (!rows.length) {
   console.error('calibrate: no finished games matched; leaving calibration.json as it was');
   process.exit(0);

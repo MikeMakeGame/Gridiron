@@ -4,6 +4,7 @@ import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildGame } from '../src/espn/model';
 import { teamNumbers } from '../src/stats/live';
+import { parseRetryAfter } from '../src/hooks/poller';
 
 const id = process.argv[2];
 if (!id) throw new Error('usage: live-probe <eventId>');
@@ -18,8 +19,17 @@ try {
 for (;;) {
   const t0 = Date.now();
   let line: Record<string, unknown> = { at: new Date().toISOString() };
+  let pause = 20_000;
   try {
-    const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=${id}`);
+    const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=${id}`, {
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (r.status === 429 || r.status === 503) {
+      // Asked to slow down: wait as long as ESPN says (5 minutes when it doesn't say, never over an hour).
+      pause = Math.max(20_000, parseRetryAfter(r.headers.get('Retry-After'), Date.now()));
+      throw new Error(`ESPN answered ${r.status}; next try in ${Math.round(pause / 1000)} s`);
+    }
+    if (!r.ok) throw new Error(`ESPN answered ${r.status}`);
     const s: any = await r.json();
     const g = buildGame(s, { ep });
     const st = s.header.competitions[0].status;
@@ -50,5 +60,5 @@ for (;;) {
   } catch (e) {
     appendFileSync(LOG, JSON.stringify({ ...line, error: String(e) }) + '\n');
   }
-  await new Promise((r) => setTimeout(r, 20_000));
+  await new Promise((r) => setTimeout(r, pause));
 }

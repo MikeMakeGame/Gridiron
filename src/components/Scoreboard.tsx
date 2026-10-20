@@ -56,7 +56,14 @@ export function Scoreboard() {
             </button>
           )}
         </span>
-        <Fresh live={live.length > 0} lastOk={poll.lastOk} polling={poll.polling} error={poll.error} onRefresh={poll.refresh} />
+        <Fresh
+          live={live.length > 0}
+          lastOk={poll.lastOk}
+          polling={poll.polling}
+          error={poll.error}
+          retryAt={poll.retryAt}
+          onRefresh={poll.refresh}
+        />
       </header>
       {poll.error && !sb && <p class="error">Couldn't reach ESPN: {poll.error}</p>}
       {!sb && !poll.error && <p class="empty">Loading the week…</p>}
@@ -145,8 +152,11 @@ function TeamRow({ t, showScore, poss, winner }: { t: TeamInfo; showScore: boole
 export function Footer() {
   return (
     <footer class="footer">
-      Live data and logos: ESPN (unofficial, personal use), fetched by your browser straight from ESPN. Advanced stats: nflverse /
-      nflfastR, CC-BY 4.0. No ads, no analytics. Not affiliated with ESPN, the NFL or any team.
+      Live data and logos: ESPN (unofficial, personal use), fetched by your browser straight from ESPN. Advanced stats:{' '}
+      <a href="https://github.com/nflverse/nflverse-data">nflverse</a> play-by-play (nflfastR models), licensed{' '}
+      <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. Gridiron changes it: it sums the plays into
+      per-game team and quarterback numbers, and builds the expected-points table behind the live EPA estimate from past
+      seasons. No ads, no analytics. Not affiliated with ESPN, the NFL, nflverse or any team.
     </footer>
   );
 }

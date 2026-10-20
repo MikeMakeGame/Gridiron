@@ -2,7 +2,7 @@
 // for hosts that block network access. Usage: npx tsx scripts/snapshot.ts [--week N]
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { scoreboard, summary } from './espn-cache';
+import { politeBytes, scoreboard, summary } from './espn-cache';
 
 const ROOT = join(import.meta.dirname, '..');
 const OUT = join(ROOT, 'snapshot-public');
@@ -61,10 +61,14 @@ for (const f of ['ep_table.json', 'calibration.json']) {
 }
 
 // Small dark-background logos (as the live app uses), so the snapshot never reaches for ESPN's CDN.
+// Same polite queue as the JSON reads; a missing logo falls back to the page's abbreviation placeholder.
 for (const name of logos.keys()) {
-  const r = await fetch(`https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500-dark/${name}&w=80&h=80`);
-  if (r.ok) writeFileSync(join(OUT, 'logos', name), Buffer.from(await r.arrayBuffer()));
-  await new Promise((res) => setTimeout(res, 150));
+  try {
+    const png = await politeBytes(`https://a.espncdn.com/combiner/i?img=/i/teamlogos/nfl/500-dark/${name}&w=80&h=80`);
+    writeFileSync(join(OUT, 'logos', name), png);
+  } catch (e) {
+    console.error(`snapshot: no logo ${name}: ${e}`);
+  }
 }
 
 console.log(`snapshot: ${sb.events.length} games, ${(bytes / 1024).toFixed(0)} KB of summaries, ${logos.size} logos`);

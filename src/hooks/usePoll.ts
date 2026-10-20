@@ -7,6 +7,7 @@ export interface PollState<T> {
   data: T | null;
   error: string | null;
   lastOk: number | null; // ms timestamp of the last good response
+  retryAt: number | null; // ESPN asked us to wait until then
   polling: boolean; // a next fetch is scheduled
   refresh: () => void;
 }
@@ -34,6 +35,7 @@ export function usePoll<T>(
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastOk, setLastOk] = useState<number | null>(null);
+  const [retryAt, setRetryAt] = useState<number | null>(null);
   const [polling, setPolling] = useState(false);
   const poller = useRef<Poller<T> | null>(null);
 
@@ -47,6 +49,7 @@ export function usePoll<T>(
     setData(null);
     setError(null);
     setLastOk(null);
+    setRetryAt(null);
     if (!enabled) return;
     const p = new Poller<T>(
       {
@@ -55,9 +58,13 @@ export function usePoll<T>(
         onData: (d, at) => {
           setData(d);
           setError(null);
+          setRetryAt(null);
           setLastOk(at);
         },
-        onError: setError,
+        onError: (message, at) => {
+          setError(message);
+          setRetryAt(at);
+        },
         onPolling: setPolling,
       },
       browserDeps,
@@ -75,7 +82,7 @@ export function usePoll<T>(
 
   const refresh = useCallback(() => poller.current?.refresh(), []);
 
-  return { data, error, lastOk, polling, refresh };
+  return { data, error, lastOk, retryAt, polling, refresh };
 }
 
 /** A clock that ticks every `ms` while mounted, for "7s ago" labels. */

@@ -1,7 +1,7 @@
 # Builds the site and the nightly nflverse numbers, then publishes to GitHub Pages.
 # Live data is fetched by each visitor's browser straight from ESPN; nothing here calls ESPN except the calibration step.
-# Action majors are the Node 24 ones (checked 2026-10-19: checkout v7, setup-node v7, setup-python v7, cache v6,
-# upload-pages-artifact v5 -> upload-artifact v7, deploy-pages v5).
+# Every action is pinned to a release's commit SHA (a tag can be moved; a SHA can't), all on the Node 24 majors.
+# Resolved 2026-10-20 from each repo's tags, releases at least two weeks old; bump by re-resolving, never by tag.
 name: pages
 
 on:
@@ -27,16 +27,16 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
       - name: Cache finished-game ESPN summaries
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .cache/espn
           key: espn-${{ github.run_id }}
@@ -51,7 +51,7 @@ jobs:
         run: npx tsx scripts/calibrate.ts
         continue-on-error: true
       - run: npm run build
-      - uses: actions/upload-pages-artifact@v5
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: dist
 
@@ -66,4 +66,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

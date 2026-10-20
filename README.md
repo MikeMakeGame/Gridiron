@@ -61,7 +61,7 @@ npm run dev
 
 Then open http://127.0.0.1:5231. `npm run nflverse` writes `public/data/` (EP table + per-game advanced stats); the app works without it, minus EPA.
 
-Optional: `npx tsx scripts/calibrate.ts` refreshes the calibration line (one polite ESPN request per new finished game, cached).
+Optional: `npx tsx scripts/calibrate.ts` refreshes the calibration line (one polite ESPN request per new finished game, cached). If ESPN answers 429/503, or three requests fail in a row, the run stops asking and works from the cache.
 
 ### Offline snapshot
 
@@ -73,7 +73,7 @@ For a host that blocks network access: `npx tsx scripts/snapshot.ts` freezes thi
 npm test
 ```
 
-The polling engine (`src/hooks/poller.ts`) runs under fake timers: a hung request recovers, errors never poll faster than the normal schedule, a game opened before kickoff picks up when it goes live, and a malformed answer never replaces good data. Play-classification tests cover kneels, spikes, flags that wipe out a play, muffed punts and safeties.
+The polling engine (`src/hooks/poller.ts`) runs under fake timers: a hung request recovers, errors never poll faster than the normal schedule, ESPN's Retry-After holds against a manual refresh and a returning tab, a game opened before kickoff picks up when it goes live, and a malformed answer never replaces good data. One cooldown covers the whole tab: once ESPN pushes back, no poller asks again until the wait is over. Play-classification tests cover kneels, spikes, flags that wipe out a play, muffed punts and safeties.
 
 ### Hosting (GitHub Pages)
 
@@ -84,7 +84,7 @@ For a fork: in the repository's settings, set Pages to build from GitHub Actions
 ## Data and terms
 
 - **Live data**: ESPN's unofficial `site.api.espn.com` JSON. Undocumented, can change without notice, and ESPN's terms don't grant this use: keep it personal, keep polling polite (15 s while live and visible, paused when the tab is hidden, backs off on errors).
-- **Advanced stats**: [nflverse](https://github.com/nflverse/nflverse-data) play-by-play (nflfastR models), CC-BY 4.0. Credit stays in the app's footer. The repo doesn't store the derived data; the workflow rebuilds it.
+- **Advanced stats**: [nflverse](https://github.com/nflverse/nflverse-data) play-by-play (nflfastR models), licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Gridiron changes it: it sums the plays into per-game team and quarterback numbers, and builds the expected-points table behind the live EPA estimate from past seasons (see above). The app's footer carries the same credit and links. The repo doesn't store the derived data; the workflow rebuilds it.
 - **Code**: MIT (see `LICENSE`), which covers the code only, not ESPN's data, nflverse's data, or team names and logos.
 - **Font**: Barlow Condensed (SIL Open Font License), served from this site; see `src/fonts/README.md`.
 - **Privacy**: no ads, no analytics, no cookies. Your browser talks to this site and to ESPN (scores and logos), nothing else.

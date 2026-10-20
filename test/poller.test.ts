@@ -107,6 +107,55 @@ describe('Poller', () => {
     p.stop();
   });
 
+  it("a manual refresh doesn't jump the server's Retry-After", async () => {
+    const { p, rec } = setup([fail(new RetryAfterError('slow down', 120_000)), ok('x')], () => 15_000);
+    p.start();
+    await vi.advanceTimersByTimeAsync(30_000);
+    p.refresh(); // tapped during the cooldown
+    await vi.advanceTimersByTimeAsync(89_000);
+    expect(rec.calls).toEqual([0]);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(rec.calls).toEqual([0, 120_000]);
+    p.stop();
+  });
+
+  it('a returning tab resumes from when the wait started, not from when the request started', async () => {
+    // The request hangs 9 s before ESPN says "wait 120 s", so the earliest next try is 129 s.
+    const slow429 = () =>
+      new Promise<never>((_, reject) => setTimeout(() => reject(new RetryAfterError('slow down', 120_000)), 9_000));
+    const { p, rec } = setup([slow429, ok('x')], () => 15_000);
+    p.start();
+    await vi.advanceTimersByTimeAsync(10_000);
+    hidden = true;
+    p.visibilityChanged();
+    await vi.advanceTimersByTimeAsync(115_000); // 125 s: past 120 s from the request's start
+    hidden = false;
+    p.visibilityChanged();
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(rec.calls).toEqual([0]);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(rec.calls).toEqual([0, 129_000]);
+    p.stop();
+  });
+
+  it('caps a Retry-After at an hour and says when it will try again', async () => {
+    const at: (number | null)[] = [];
+    const p = new Poller<string>(
+      {
+        fetcher: () => Promise.reject(new RetryAfterError('slow down', 30 * 86_400_000)),
+        nextIn: () => 15_000,
+        onData: () => {},
+        onError: (_, retryAt) => at.push(retryAt),
+        onPolling: () => {},
+      },
+      deps,
+    );
+    p.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(at).toEqual([3_600_000]);
+    p.stop();
+  });
+
   it('follows a game from before kickoff into the live game, and stops at the final', async () => {
     const states = ['pre', 'pre', 'in', 'in', 'post'];
     const { p, rec } = setup(

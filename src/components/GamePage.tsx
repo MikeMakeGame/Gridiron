@@ -181,6 +181,7 @@ export function GamePage({ id }: { id: string }) {
               lastOk={poll.lastOk}
               polling={poll.polling}
               error={poll.error ?? (unreadable ? "Couldn't read ESPN's latest update" : null)}
+              retryAt={poll.retryAt}
               onRefresh={poll.refresh}
             />
           )}

@@ -372,6 +372,7 @@ img { display: block; }
 .jump.is-active { color: var(--tx); }
 .jump.is-active::before { content: ""; position: absolute; left: 22%; right: 22%; top: -1px; height: 3px; background: var(--tx); }
 .footer { padding: 28px var(--pad) 20px; font-size: 12px; line-height: 1.5; color: var(--tx3); }
+.footer a { color: var(--tx2); text-decoration: underline; text-underline-offset: 2px; }
 .empty, .error { padding: 48px var(--pad); text-align: center; font: 500 16px/1.3 var(--disp); letter-spacing: .08em; text-transform: uppercase; color: var(--tx2); }
 .error { color: var(--bad); }
 

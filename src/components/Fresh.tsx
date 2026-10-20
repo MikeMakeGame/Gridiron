@@ -10,6 +10,7 @@ interface Props {
   lastOk: number | null;
   polling: boolean;
   error: string | null;
+  retryAt?: number | null; // ESPN asked us to wait until then: count down instead of offering a tap that can't help
   onRefresh: () => void;
 }
 
@@ -19,12 +20,17 @@ export function Fresh(props: Props) {
   return <LiveFresh {...props} />;
 }
 
-function LiveFresh({ live, lastOk, polling, error, onRefresh }: Props) {
+function LiveFresh({ live, lastOk, polling, error, retryAt, onRefresh }: Props) {
   const now = useNow(1000);
   const age = lastOk ? now - lastOk : Infinity;
   let cls = 'is-idle';
   let text = lastOk ? agoText(age) : 'loading';
-  if ((live && polling) || error) {
+  const wait = retryAt ? retryAt - now : 0;
+  if (wait > 0) {
+    const s = Math.ceil(wait / 1000);
+    cls = 'is-stale';
+    text = `ESPN says wait ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  } else if ((live && polling) || error) {
     if (age >= 120_000) {
       cls = 'is-dead';
       text = 'tap to refresh';
