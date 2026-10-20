@@ -89,7 +89,8 @@ function GameCard({ e }: { e: EspnEvent }) {
   const status =
     st === 'pre' ? kickoffText(e.date) : clockLabel(e.status.type.name, e.status.period ?? 0, e.status.displayClock, e.status.type.shortDetail);
   const winner = st === 'post' ? (home.score > away.score ? home.id : away.score > home.score ? away.id : '') : '';
-  const meta = [c.broadcasts?.[0]?.names?.join('/'), c.odds?.[0]?.details].filter(Boolean).join(' · ');
+  // Broadcast only: no betting lines on this viewer.
+  const meta = c.broadcasts?.[0]?.names?.join('/') ?? '';
 
   return (
     <a class={`sb-game is-${st === 'in' ? 'live' : st === 'pre' ? 'pre' : 'final'}${close ? ' is-close' : ''}`} href={`#/g/${e.id}`} onClick={linkTo(e.id)}>

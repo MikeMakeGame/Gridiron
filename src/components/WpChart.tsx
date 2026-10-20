@@ -43,6 +43,18 @@ export function WpChart({ g }: { g: Game }) {
             <line class="wp-mid" x1={0} x2={w} y1={y(0.5)} y2={y(0.5)} />
             {d && <path class="wp-line" d={d} />}
             {last && <circle class="wp-now" cx={x(last.gameSec)} cy={y(last.wpHome!)} r={4} />}
+            {last && !done && (
+              // Who's winning right now, written at the end of the line, so the chart reads without the caption.
+              <text
+                class="wp-now-label"
+                x={Math.min(x(last.gameSec) + 8, w - 4)}
+                y={Math.min(H - 6, Math.max(14, y(last.wpHome!) + 4))}
+                text-anchor={x(last.gameSec) + 70 > w ? 'end' : 'start'}
+                style={teamVars(last.wpHome! >= 0.5 ? g.home : g.away)}
+              >
+                {last.wpHome! >= 0.5 ? `${g.home.abbr} ${wpText(last.wpHome!)}` : `${g.away.abbr} ${wpText(1 - last.wpHome!)}`}
+              </text>
+            )}
             {sel && <line class="wp-pick" x1={x(sel.gameSec)} x2={x(sel.gameSec)} y1={0} y2={H} />}
             <text class="wp-label home" x={4} y={14} style={teamVars(g.home)}>
               {g.home.abbr}

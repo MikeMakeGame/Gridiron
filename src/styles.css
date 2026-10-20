@@ -150,9 +150,8 @@ img { display: block; }
 .sbar-team .score { grid-row: 2; font-weight: 700; font-size: 46px; line-height: .86; letter-spacing: -.01em; }
 .sbar-team.away .abbr, .sbar-team.away .score { grid-column: 2; }
 .sbar-team.home .abbr, .sbar-team.home .score { grid-column: 2; }
-.sbar-team .tos { grid-row: 1; display: flex; gap: 3px; align-self: end; padding-bottom: 4px; }
-.sbar-team.away .tos { grid-column: 3; }
-.sbar-team.home .tos { grid-column: 1; }
+/* timeouts sit under the score, clear of the clock in the middle */
+.sbar-team .tos { grid-row: 3; grid-column: 2; display: flex; gap: 4px; padding-top: 5px; }
 .to { width: 6px; height: 6px; border-radius: 50%; background: var(--tx); display: block; }
 .to.used { background: none; box-shadow: inset 0 0 0 1px var(--tx3); }
 .sbar-team .poss { grid-row: 2; align-self: center; }
@@ -211,10 +210,14 @@ img { display: block; }
 .wp-pick { stroke: var(--tx); stroke-width: 1; stroke-opacity: .6; vector-effect: non-scaling-stroke; }
 .wp-q { fill: #fff; fill-opacity: 0; }
 .wp-q.odd { fill-opacity: .045; }
-.wp-mid { stroke: var(--line2); stroke-width: 1; stroke-dasharray: 2 3; vector-effect: non-scaling-stroke; }
+.wp-mid { stroke: var(--tx3); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
 .wp-line { fill: none; stroke: var(--tx); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .wp-now { fill: var(--tx); stroke: var(--tx); stroke-opacity: .5; stroke-width: 0; }
 .wp-label { font: 700 11px var(--disp); letter-spacing: .14em; fill: var(--ta); }
+.wp-label, .wp-now-label { --ta: var(--tc, #9aa3ad); }
+@supports (color: oklch(from red l c h)) { .wp-now-label { --ta: oklch(from var(--tc, #9aa3ad) max(l, .64) calc(c * 1.35) h); } }
+.wp-now-label { font: 700 14px var(--disp); letter-spacing: .06em; fill: var(--ta); paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
+.lp-age { color: var(--tx3); letter-spacing: .08em; }
 
 .curdrive { margin-top: 18px; }
 .cd-track, .drive-track {

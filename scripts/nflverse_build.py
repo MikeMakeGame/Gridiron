@@ -5,7 +5,7 @@ Reads nflverse play-by-play (CC-BY 4.0) from its GitHub release, writes small JS
   public/data/games/<espn id>.json  per-game EPA / success / CPOE / pass rate over expected / top plays
 Stdlib only, so a GitHub Action can run it with no installs.
 
-Usage: python -X utf8 -I scripts/nflverse_build.py [--season 2026] [--ep-seasons 2023,2024,2025,2026] [--out public/data]
+Usage: python -X utf8 -I scripts/nflverse_build.py [--season 2026] [--ep-seasons 2022,2023,2024,2025] [--out public/data]
 """
 from __future__ import annotations
 
@@ -223,6 +223,8 @@ def team_block(plays: list[dict], team: str) -> dict:
         "early_epa": r3(mean(fnum(p["epa"]) for p in early)),
         "proe": r3(mean((1.0 if p["pass"] == "1" else 0.0) - fnum(p["xpass"]) for p in xp)) if xp else None,
         "explosive_rate": r3(sum(1 for p in mine if explosive(p)) / len(mine)) if mine else None,
+        # EPA/play through the end of Q1, Q2, Q3: what the live estimate should match at those moments.
+        "thru_q": [r3(mean(fnum(p["epa"]) for p in mine if (inum(p["qtr"]) or 9) <= q)) for q in (1, 2, 3)],
     }
 
 

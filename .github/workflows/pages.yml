@@ -6,7 +6,10 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: '30 11 * * *' # 4:30 AM Pacific: nflverse posts the night's games by then
+    # nflverse's 2026 play-by-play file was updated 16:28 UTC on Mon 10-19 (9:28 AM PDT); build after that, plus a
+    # late-evening run in case the release moves.
+    - cron: '0 18 * * *'
+    - cron: '0 6 * * *'
   workflow_dispatch:
 
 permissions:

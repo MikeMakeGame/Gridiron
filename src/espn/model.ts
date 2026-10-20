@@ -47,6 +47,7 @@ export interface Play {
   wpHome: number | null; // home win probability after the play
   wpDelta: number; // change in home WP caused by this play
   epa: number | null; // estimated live EPA for the offense, scrimmage plays only
+  wallclock: string | null; // when ESPN says the play happened
   success: boolean | null; // 40/60/100 rule, scrimmage plays only
   explosive: boolean;
   ddText: string; // "2nd & 7 · SF 41"
@@ -99,7 +100,6 @@ export interface Game {
   situation: Situation | null;
   lastPlay: Play | null;
   box: EspnSummary['boxscore'];
-  odds: string;
   truncated: boolean; // a replay cut; the box score is still the final one
   seasonType: number;
   kickoff: string; // ISO date
@@ -223,7 +223,9 @@ function shortResult(d: EspnDrive): string {
 export interface BuildOptions {
   upto?: number; // replay: keep only the first N plays
   ep?: EpTable | null;
-  scoreboardSituation?: EspnSituation;
+  // ESPN's summary carries no situation block during a live game (seen on MNF 10-19); the scoreboard does,
+  // so the page passes the scoreboard's timeouts in. Down and distance still come from the fresher summary.
+  timeouts?: { home: number | null; away: number | null };
 }
 
 export function buildGame(s: EspnSummary, opts: BuildOptions = {}): Game {
@@ -337,6 +339,7 @@ export function buildGame(s: EspnSummary, opts: BuildOptions = {}): Game {
         wpHome: wp,
         wpDelta,
         epa: null,
+        wallclock: p.wallclock ?? null,
         success: scrimmage ? isSuccess(down, distance, yards, td, turnover) : null,
         explosive: scrimmage && !turnover && ((kind === 'rush' && yards >= 10) || (kind === 'pass' && yards >= 20)),
         ddText: dd ? `${dd} · ${fieldText(ytg, off, def)}` : kind === 'kick' ? 'Kickoff' : p.type?.text ?? '',
@@ -404,11 +407,10 @@ export function buildGame(s: EspnSummary, opts: BuildOptions = {}): Game {
     otLen,
     situation:
       state === 'in' && status.type.name !== 'STATUS_HALFTIME'
-        ? situationOf(truncated ? undefined : s.situation ?? opts.scoreboardSituation, lastPlay, home, away)
+        ? situationOf(truncated ? undefined : s.situation, lastPlay, home, away, truncated ? undefined : opts.timeouts)
         : null,
     lastPlay,
     box: s.boxscore,
-    odds: s.pickcenter?.[0]?.details ?? comp.odds?.[0]?.details ?? '',
     truncated,
     seasonType,
     kickoff: comp.date,
@@ -440,7 +442,13 @@ export function clockLabel(name: string, period: number, clock: string | undefin
   }
 }
 
-function situationOf(sit: EspnSituation | undefined, last: Play | null, home: TeamInfo, away: TeamInfo): Situation | null {
+function situationOf(
+  sit: EspnSituation | undefined,
+  last: Play | null,
+  home: TeamInfo,
+  away: TeamInfo,
+  timeouts?: { home: number | null; away: number | null },
+): Situation | null {
   const abbr = (id: string) => (id === home.id ? home.abbr : away.abbr);
   const other = (id: string) => (id === home.id ? away.id : home.id);
   if (sit && sit.possession) {
@@ -463,7 +471,7 @@ function situationOf(sit: EspnSituation | undefined, last: Play | null, home: Te
     text: [dd, fieldText(last.endYtg, abbr(pos), abbr(other(pos)))].filter(Boolean).join(' · '),
     possessionId: pos,
     redZone: last.endYtg <= 20 && last.endDown > 0,
-    homeTimeouts: null,
-    awayTimeouts: null,
+    homeTimeouts: timeouts?.home ?? null,
+    awayTimeouts: timeouts?.away ?? null,
   };
 }

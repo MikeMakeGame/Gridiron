@@ -35,7 +35,7 @@ export function epOf(t: EpTable, down: number, distance: number, ytg: number): n
   return t.ep[d][bucket(t, Math.max(1, distance))][y];
 }
 
-// Points use the nflfastR convention: TD = 7, FG = 3, safety = -2 for the offense.
+// Scrimmage plays only (field goals are special teams). Points follow nflfastR: TD = 7, safety = -2 for the offense.
 export function estimateEpa(t: EpTable, p: EpaInput, offPts: number, defPts: number): number | null {
   if (!p.down || p.ytg <= 0) return null;
   const before = epOf(t, p.down, p.distance, p.ytg);

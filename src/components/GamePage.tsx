@@ -1,12 +1,12 @@
 // One game, one scroll: score bar, now, drives, numbers, players, post-game model numbers.
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { getEpTable, getSummary, SNAPSHOT } from '../espn/api';
+import { getEpTable, getScoreboard, getSummary, SNAPSHOT } from '../espn/api';
 import { buildGame, periodLabel, type Game, type TeamInfo } from '../espn/model';
 import { biggestPlays, possessionsLeft } from '../stats/live';
 import type { EspnSummary } from '../espn/types';
 import type { EpTable } from '../stats/ep';
-import { smallLogo, teamVars } from '../format';
-import { usePoll } from '../hooks/usePoll';
+import { agoText, smallLogo, teamVars } from '../format';
+import { useNow, usePoll } from '../hooks/usePoll';
 import { Fresh } from './Fresh';
 import { linkTo } from '../route';
 import { WpChart } from './WpChart';
@@ -31,6 +31,17 @@ function nextIn(s: EspnSummary): number | null {
 
 export function GamePage({ id }: { id: string }) {
   const poll = usePoll(`g${id}`, (s) => getSummary(id, s), nextIn);
+  // Timeouts live only in the scoreboard feed; check it every 30 s while this game is on.
+  const sb = usePoll(
+    `sb${id}`,
+    (s) => getScoreboard(undefined, s),
+    (d) => (!SNAPSHOT && d.events.find((e) => e.id === id)?.status.type.state === 'in' ? 30_000 : null),
+  );
+  const sbSit = sb.data?.events.find((e) => e.id === id)?.competitions[0].situation;
+  const timeouts = useMemo(
+    () => (sbSit ? { home: sbSit.homeTimeouts ?? null, away: sbSit.awayTimeouts ?? null } : undefined),
+    [sbSit?.homeTimeouts, sbSit?.awayTimeouts],
+  );
   const [ep, setEp] = useState<EpTable | null>(null);
   const [replay, setReplay] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -39,7 +50,7 @@ export function GamePage({ id }: { id: string }) {
     getEpTable().then(setEp);
   }, []);
 
-  const full = useMemo(() => (poll.data ? buildGame(poll.data, { ep }) : null), [poll.data, ep]);
+  const full = useMemo(() => (poll.data ? buildGame(poll.data, { ep, timeouts }) : null), [poll.data, ep, timeouts]);
   const g = useMemo(() => (poll.data && replay != null ? buildGame(poll.data, { ep, upto: replay }) : full), [poll.data, ep, replay, full]);
 
   // Plays that arrived since the last poll get a one-shot highlight (never on first load or in replay scrubbing).
@@ -150,6 +161,7 @@ export function GamePage({ id }: { id: string }) {
           <div class="lastplay">
             <div class="lp-label">
               {pivot ? `Play of the game · ${periodLabel(pivot.period)} ${pivot.clock}` : live ? 'Last play' : 'Final play'}
+              {live && replay == null && headline.wallclock && <PlayAge at={headline.wallclock} />}
             </div>
             <div class="lp-text">{headline.text}</div>
             <div class="play-badges">
@@ -231,13 +243,20 @@ function CurrentDrive({ g }: { g: Game }) {
   );
 }
 
+// How long ago ESPN says the play happened: the data's age, as opposed to the pill's "when we last checked".
+function PlayAge({ at }: { at: string }) {
+  const now = useNow(5000);
+  const t = new Date(at).getTime();
+  if (!Number.isFinite(t)) return null;
+  return <span class="lp-age"> · {agoText(now - t)}</span>;
+}
+
 function Pregame({ g }: { g: Game }) {
   return (
     <div class="lastplay">
       <div class="lp-label">Kickoff</div>
       <div class="lp-text">
-        {g.clockText}
-        {g.odds && ` · ${g.odds}`}
+        {g.clockText} · {g.away.abbr} {g.away.record} at {g.home.abbr} {g.home.record}
       </div>
     </div>
   );
@@ -264,11 +283,12 @@ function JumpBar({ ids }: { ids: string[] }) {
     );
     els.forEach((e) => io.observe(e));
     return () => io.disconnect();
-  }, []);
+  }, [ids.join()]);
   return (
     <nav class="jumpbar">
-      {JUMPS.map(([id, label]) => (
+      {jumps.map(([id, label]) => (
         <button
+          key={id}
           class={`jump${active === id ? ' is-active' : ''}`}
           onClick={() => {
             setActive(id);
