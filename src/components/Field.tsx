@@ -1,7 +1,7 @@
 // The little football field: both end zones in team colours (away on the left, home on the right, as the scorebar
 // reads), the line of scrimmage, the line to gain, the drive so far and the last snap's path.
 // ESPN's yard lines count from the home goal line; here x counts from the away goal line (0) to the home one (100).
-import type { Game, Play } from '../espn/model';
+import { firstSnap, type Game, type Play } from '../espn/model';
 import { useWidth } from '../hooks/usePoll';
 import { teamVars } from '../format';
 
@@ -29,7 +29,9 @@ export function Field({ g, spot, note }: { g: Game; spot: Spot | null; note?: st
   const goalToGo = spot ? spot.distance >= spot.ytg : false;
   const gain = spot && spot.down > 0 && !goalToGo ? spotX(g, spot.offenseId, spot.ytg - spot.distance) : null;
   const drive = g.drives.find((d) => d.isLive && d.teamId === spot?.offenseId) ?? null;
-  const driveStart = drive ? (toRight ? drive.startPos : 100 - drive.startPos) : null;
+  // The drive starts at its first snap: ESPN reports a new drive's start as the goal line until that snap is in.
+  const first = drive ? firstSnap(drive) : null;
+  const driveStart = drive && los != null ? (first ? spotX(g, first.offenseId, first.ytg) : los) : null;
   const last = drive && los != null ? lastSnap(drive.plays, g, los) : null;
 
   return (

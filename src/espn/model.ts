@@ -377,6 +377,12 @@ export function buildGame(s: EspnSummary, opts: BuildOptions = {}): Game {
       drive.points = isHome ? after.homeScore - scoreBefore.home : after.awayScore - scoreBefore.away;
       // ESPN's current drive often has no end spot yet; the last snap's result is the truth.
       if (drive.isLive) drive.endPos = after.endTeamId === teamId ? 100 - after.endYtg : 100 - after.ytg;
+      // Until its first snap is in, ESPN starts a new drive at the goal line (yard line 0); the first snap, or
+      // with none yet the ball now, is where it really began.
+      if (drive.isLive) {
+        const first = firstSnap(drive);
+        drive.startPos = first ? 100 - first.ytg : drive.endPos;
+      }
       // A drive that just scored is over, even while ESPN still calls it current (until the kickoff).
       if (drive.isLive && after.scoring && drive.points > 0) {
         drive.isLive = false;
@@ -443,6 +449,11 @@ export function buildGame(s: EspnSummary, opts: BuildOptions = {}): Game {
     seasonType,
     kickoff: comp.date,
   };
+}
+
+/** A drive's first snap from scrimmage by its own team (a run or pass, flagged or not): where the drive really began. */
+export function firstSnap(d: Drive): Play | null {
+  return d.plays.find((p) => (p.kind === 'pass' || p.kind === 'rush') && p.down > 0 && p.offenseId === d.teamId) ?? null;
 }
 
 function countPlays(ds: EspnDrive[]): number {

@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { getEpTable, getScoreboardForDay, getSummary, SNAPSHOT } from '../espn/api';
 import { gameInterval } from '../espn/cadence';
 import { matchClips } from '../espn/clips';
-import { buildGame, periodLabel, type Game, type Play, type TeamInfo } from '../espn/model';
+import { buildGame, firstSnap, periodLabel, type Game, type Play, type TeamInfo } from '../espn/model';
 import { biggestPlays, possessionsLeft } from '../stats/live';
 import { moments } from '../stats/moments';
 import { compareRows, edge, type CompareRow } from '../stats/teamstats';
@@ -309,7 +309,7 @@ export function GamePage({ id }: { id: string }) {
             </div>
           )}
           {live && <Field g={g} spot={spot} note={fieldNote(g)} />}
-          {live && spot && <DriveLine g={g} offenseId={spot.offenseId} />}
+          {live && spot && <DriveLine g={g} spot={spot} />}
           {ahead ? (
             <div class="lastplay">
               <div class="lp-label">
@@ -594,18 +594,27 @@ function TeamCell({ t, poss, tos, giveaways, pre }: { t: TeamInfo; poss: boolean
 }
 
 // Under the field: the drive in words, since the field shows it in yards.
-function DriveLine({ g, offenseId }: { g: Game; offenseId: string }) {
-  const d = g.drives.find((x) => x.isLive && x.teamId === offenseId);
+// Yards count from the drive's first snap to the ball now, the same span the field draws.
+function DriveLine({ g, spot }: { g: Game; spot: Spot }) {
+  const d = g.drives.find((x) => x.isLive && x.teamId === spot.offenseId);
   if (!d) return null;
   const t = d.teamId === g.home.id ? g.home : g.away;
-  const snaps = d.plays.filter((p) => (p.kind === 'pass' || p.kind === 'rush') && !p.noPlay);
-  const yards = Math.round(d.endPos - d.startPos);
+  const first = firstSnap(d);
+  const snaps = d.plays.filter((p) => (p.kind === 'pass' || p.kind === 'rush') && p.down > 0 && !p.noPlay);
   return (
     <div class="driveline" style={teamVars(t)}>
       <Icon name="ball" size={14} />
       <b>{t.abbr} drive</b>
-      <span>{snaps.length} plays</span>
-      <span>{yards} yds</span>
+      {first ? (
+        <>
+          <span>
+            {snaps.length} play{snaps.length === 1 ? '' : 's'}
+          </span>
+          <span>{Math.round(first.ytg - spot.ytg)} yds</span>
+        </>
+      ) : (
+        <span>first snap next</span>
+      )}
     </div>
   );
 }

@@ -161,6 +161,34 @@ describe('timeline markers', () => {
   });
 });
 
+describe('a drive that has just started', () => {
+  it('starts at the ball, not at the goal line ESPN reports before the first snap', () => {
+    // ARI kicks to DEN (away), touchback at the DEN 15; ESPN's current drive has start.yardLine 0 and no snaps yet.
+    const kick = play({ type: 'Kickoff', text: 'K.Kicker kicks 65 yards from HOM 35 to AWY 0. Touchback.', off: HOME, ytg: 65, endOff: AWAY, endYtg: 85 });
+    const s = summary([]);
+    s.header.competitions[0].status = { period: 2, displayClock: '14:16', type: { name: 'STATUS_IN_PROGRESS', state: 'in', completed: false } };
+    s.drives = { current: { id: 'd2', team: { id: AWAY, abbreviation: 'AWY' }, start: { period: { number: 2 }, yardLine: 0 }, plays: [kick] } };
+    const d = buildGame(s).drives.find((x) => x.isLive)!;
+    expect(d.startPos).toBe(15);
+    expect(d.endPos).toBe(15);
+  });
+
+  it('starts a home drive at its first snap, and the field puts it on the home side', () => {
+    // Home ball at its own 30 after a return, then a 6-yard run; ESPN still says the drive began at yard line 0.
+    const ret = play({ type: 'Kickoff', text: 'K.Kicker kicks 60 yards from AWY 35 to HOM 5. R.Returner to HOM 30 for 25 yards.', off: AWAY, ytg: 65, endOff: HOME, endYtg: 70 });
+    const run = play({ type: 'Rush', text: 'R.Runner up the middle to HOM 36 for 6 yards.', off: HOME, ytg: 70, endYtg: 64, yards: 6 });
+    const s = summary([]);
+    s.header.competitions[0].status = { period: 1, displayClock: '9:00', type: { name: 'STATUS_IN_PROGRESS', state: 'in', completed: false } };
+    s.drives = { current: { id: 'd3', team: { id: HOME, abbreviation: 'HOM' }, start: { period: { number: 1 }, yardLine: 0 }, plays: [ret, run] } };
+    const g = buildGame(s);
+    const d = g.drives.find((x) => x.isLive)!;
+    expect(d.startPos).toBe(30);
+    expect(d.endPos).toBe(36);
+    // Home attacks leftward: its own 30 is 70 yards from the away goal line.
+    expect(spotX(g, HOME, 70)).toBe(70);
+  });
+});
+
 describe('team colours that read as one', () => {
   it('gives the home side plain ink when both teams are gold (black-and-gold away, tan home)', () => {
     const away = { color: '#000000', color2: '#ffb612' };
