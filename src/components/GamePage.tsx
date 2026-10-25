@@ -1,14 +1,18 @@
-// One game. The surface answers "who's winning and what just happened"; win probability, the numbers, drives and
-// players are closed rows underneath, each with a one-line answer. A bottom dock holds back and the game's one action.
+// One game, in four tabs under a sticky score bar: Live (the field, the situation, the last play), Story (win
+// probability with its key plays marked, then the drives), Stats (head to head) and Players (the box score).
+// A bottom dock holds back and the game's one action.
 import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { getEpTable, getScoreboardForDay, getSummary, SNAPSHOT } from '../espn/api';
 import { gameInterval } from '../espn/cadence';
-import { buildGame, periodLabel, type Game, type TeamInfo } from '../espn/model';
-import { biggestPlays, possessionsLeft, teamNumbers } from '../stats/live';
+import { matchClips } from '../espn/clips';
+import { buildGame, periodLabel, type Game, type Play, type TeamInfo } from '../espn/model';
+import { biggestPlays, possessionsLeft } from '../stats/live';
+import { moments } from '../stats/moments';
+import { compareRows, edge, type CompareRow } from '../stats/teamstats';
 import type { EspnSummary } from '../espn/types';
 import type { EpTable } from '../stats/ep';
-import { agoText, pct, signed, smallLogo, teamVars, wpText } from '../format';
+import { agoText, smallLogo, teamVars, wpText } from '../format';
 import { useNow, usePoll } from '../hooks/usePoll';
 import { Fresh } from './Fresh';
 import { Logo } from './Logo';
@@ -21,8 +25,20 @@ import { Numbers } from './Numbers';
 import { Players } from './Players';
 import { Advanced } from './Advanced';
 import { WpDelta } from './Badges';
-import { Fold } from './Fold';
+import { Field, type Spot } from './Field';
+import { Compare, TeamStats } from './TeamStats';
+import { ClipThumb, KeyPlays } from './KeyPlays';
+import { Icon } from './Icons';
 import { Footer } from './Scoreboard';
+
+type Tab = 'now' | 'story' | 'stats' | 'players';
+const TABS: Tab[] = ['now', 'story', 'stats', 'players'];
+
+// The tab lives in the link (#/g/<id>/stats), so a reload or a shared link opens where it was.
+function tabFromHash(): Tab | null {
+  const m = location.hash.match(/^#\/g\/\d+\/(\w+)/);
+  return m && (TABS as string[]).includes(m[1]) ? (m[1] as Tab) : null;
+}
 
 /** Poll only while the game is live (see ../espn/cadence); the offline snapshot never polls. */
 function pollInterval(state: 'pre' | 'in' | 'post', statusName: string): number | null {
@@ -57,9 +73,21 @@ export function GamePage({ id }: { id: string }) {
   const [ep, setEp] = useState<EpTable | null>(null);
   const [replay, setReplay] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [picked, setTab] = useState<Tab | null>(tabFromHash);
+  const [selected, setSelected] = useState<string | null>(null);
 
   useEffect(() => {
     getEpTable().then(setEp);
+  }, []);
+
+  // A link to another tab of this same game (typed, or pasted) switches the tab.
+  useEffect(() => {
+    const f = () => {
+      const t = tabFromHash();
+      if (t) setTab(t);
+    };
+    window.addEventListener('hashchange', f);
+    return () => window.removeEventListener('hashchange', f);
   }, []);
 
   // A payload that passes the shape check but still breaks the model keeps the last good game on screen.
@@ -110,6 +138,16 @@ export function GamePage({ id }: { id: string }) {
       situation: hasSnap ? [sbSit.shortDownDistanceText, sbSit.possessionText].filter(Boolean).join(' · ') : '',
       redZone: hasSnap && !!sbSit.isRedZone,
       possession: sbSit.possession ?? null,
+      // The spot for the field. The scoreboard's yard line counts from the home goal line.
+      spot:
+        hasSnap && sbSit.possession && sbSit.yardLine != null
+          ? {
+              offenseId: sbSit.possession,
+              ytg: sbSit.possession === g.home.id ? 100 - sbSit.yardLine : sbSit.yardLine,
+              down: sbSit.down ?? 0,
+              distance: sbSit.distance ?? 0,
+            }
+          : null,
       wpHome: lp.probability?.homeWinPercentage ?? null,
       // The score bar follows the newer feed too, so a just-in touchdown and the score agree.
       home: scoreOf('home'),
@@ -161,6 +199,37 @@ export function GamePage({ id }: { id: string }) {
     [],
   );
 
+  // Highlight clips pinned to their plays, and the plays that earn a marker. In a replay, only what has happened.
+  // Matched against the whole game, so a replay's cut can't hand a later clip to an earlier play; then only the
+  // plays the replay has reached keep theirs.
+  const allClips = useMemo(() => matchClips(poll.data?.videos, full?.plays ?? []), [poll.data, full]);
+  const clips = useMemo(() => {
+    if (!g || g === full) return allClips;
+    const reached = new Set(g.plays.map((p) => p.id));
+    return { ...allClips, byPlay: new Map([...allClips.byPlay].filter(([id]) => reached.has(id))) };
+  }, [allClips, g, full]);
+  const clipIds = useMemo(() => new Set(clips.byPlay.keys()), [clips]);
+  const marks = useMemo(() => (g ? moments(g, clipIds) : []), [g, clipIds]);
+
+  // Live opens on the field; a final opens on its story. A dot on Story when a key play lands while it's out of view.
+  // The opening tab is decided once, when the game first loads: a game going final, or a replay, never moves the reader.
+  // Before kickoff only the first tab has anything behind it, whatever the link says.
+  const opened = useRef<Tab | null>(null);
+  if (g && !opened.current) opened.current = g.state === 'post' ? 'story' : 'now';
+  const tab: Tab = g?.state === 'pre' ? 'now' : picked ?? opened.current ?? 'now';
+  const seenMarks = useRef<number | null>(null);
+  if (g && (seenMarks.current == null || tab === 'story')) seenMarks.current = marks.length;
+  const storyNews = tab !== 'story' && seenMarks.current != null && marks.length > seenMarks.current;
+  const pickTab = (t: Tab) => {
+    setTab(t);
+    try {
+      history.replaceState(null, '', `#/g/${id}/${t}`);
+    } catch {
+      // The frame refused; the tab still changes.
+    }
+    window.scrollTo(0, 0);
+  };
+
   if (!g) {
     return (
       <div class="app view-game">
@@ -176,77 +245,151 @@ export function GamePage({ id }: { id: string }) {
   const lastSnap = [...g.plays].reverse().find((p) => p.kind !== 'kick' || g.plays.length < 3) ?? g.lastPlay;
   const pivot = g.state === 'post' && !g.truncated ? biggestPlays(g, 1)[0] ?? null : null;
   const headline = pivot ?? lastSnap;
-  const curDrive = g.drives.find((d) => d.isLive) ?? null;
+  const headClip = headline && !ahead ? clips.byPlay.get(headline.id) : undefined;
   const possLeft = possessionsLeft(g);
+  const sit = g.situation;
+  const spot: Spot | null = ahead
+    ? ahead.spot
+    : sit && sit.ytg != null && sit.down > 0
+      ? { offenseId: sit.possessionId, ytg: sit.ytg, down: sit.down, distance: sit.distance }
+      : null;
+  const sitText = ahead ? ahead.situation : sit?.text;
+  const redZone = ahead ? ahead.redZone : !!sit?.redZone;
+  const giveaways = turnoverCounts(g);
 
   return (
     <div class="app view-game">
-      <header class="scorebar">
-        <TeamCell t={withScore(g.away, ahead?.away)} poss={poss === g.away.id} tos={g.situation?.awayTimeouts ?? null} pre={g.state === 'pre'} />
-        <div class="sbar-mid">
-          <div class="clock">{g.clockText}</div>
-        </div>
-        <TeamCell t={withScore(g.home, ahead?.home)} poss={poss === g.home.id} tos={g.situation?.homeTimeouts ?? null} pre={g.state === 'pre'} />
-      </header>
-
-      <section class="surface" id="now">
-        {g.state === 'pre' && <Pregame g={g} />}
-        {(ahead ? ahead.situation : g.situation?.text) && (
-          <div class={`situation${(ahead ? ahead.redZone : g.situation?.redZone) ? ' is-redzone' : ''}`}>
-            <span class="sit-text">{ahead ? ahead.situation : g.situation?.text}</span>
-            {(ahead ? ahead.redZone : g.situation?.redZone) && <span class="sit-extra">Red zone</span>}
-            {possLeft != null && possLeft < 6 && <span class="sit-extra">{possessionsText(possLeft)}</span>}
-          </div>
-        )}
-        {ahead ? (
-          <div class="lastplay">
-            <div class="lp-label">
-              Last play<span class="lp-age"> · just in, details to follow</span>
-            </div>
-            {/* No swing badge here: the summary may be several plays behind, so a difference would span them all. */}
-            <div class="lp-text">{ahead.text}</div>
-          </div>
-        ) : headline && (
-          <div class="lastplay">
-            <div class="lp-label">
-              {pivot ? `Play of the game · ${periodLabel(pivot.period)} ${pivot.clock}` : live ? 'Last play' : 'Final play'}
-              {live && replay == null && headline.wallclock && <PlayAge at={headline.wallclock} />}
-            </div>
-            <div class="lp-text">{headline.text}</div>
-            {/* One badge on the surface: who the play swung toward. Its EPA is one tap down, in Drives. */}
-            <div class="play-badges">
-              <WpDelta g={g} p={headline} />
+      <div class="game-head">
+        <header class="scorebar">
+          <TeamCell t={withScore(g.away, ahead?.away)} poss={poss === g.away.id} tos={sit?.awayTimeouts ?? null} giveaways={giveaways.away} pre={g.state === 'pre'} />
+          <div class="sbar-mid">
+            <div class="clock">
+              {live && <Icon name="clock" size={14} />}
+              {g.clockText}
             </div>
           </div>
-        )}
-      </section>
-
-      {/* Everything else one tap down, each closed row carrying its own one-line answer. */}
-      <div class="secs">
-        {g.plays.length > 0 && (
-          <Fold id="wp" label="Win probability" headline={wpHeadline(g)}>
-            <WpChart g={g} />
-          </Fold>
-        )}
-        {g.plays.length > 0 && (
-          <Fold id="numbers" label="Numbers" headline={numbersHeadline(g, !!ep)}>
-            <Numbers g={g} epReady={!!ep} />
-            {g.state === 'post' && !g.truncated && <Advanced g={g} />}
-          </Fold>
-        )}
-        {/* Before kickoff these would be empty rows, so they appear with the first drive and the first box score. */}
-        {g.drives.length > 0 && (
-          <Fold id="drives" label="Drives" headline={drivesHeadline(g)}>
-            {curDrive && <CurrentDrive g={g} />}
-            <Drives g={g} fresh={fresh} />
-          </Fold>
-        )}
-        {!!g.box?.players?.length && (
-          <Fold id="players" label="Players" headline={playersHeadline(g)}>
-            <Players g={g} />
-          </Fold>
-        )}
+          <TeamCell t={withScore(g.home, ahead?.home)} poss={poss === g.home.id} tos={sit?.homeTimeouts ?? null} giveaways={giveaways.home} pre={g.state === 'pre'} />
+        </header>
+        <nav class="tabs" role="tablist" aria-label="Game">
+          {TABS.map((t) => (
+            <button
+              key={t}
+              role="tab"
+              class={`tab${tab === t ? ' is-on' : ''}`}
+              aria-selected={tab === t}
+              // Before kickoff there's nothing behind the other three.
+              disabled={g.state === 'pre' && t !== 'now'}
+              onClick={() => pickTab(t)}
+            >
+              {tabLabel(t, g)}
+              {t === 'story' && storyNews && <span class="tab-dot" aria-label="new key play" />}
+            </button>
+          ))}
+        </nav>
       </div>
+
+      {tab === 'now' && (
+        <section class="surface" role="tabpanel">
+          {g.state === 'pre' && <Pregame g={g} />}
+          {sitText && (
+            <div class={`situation${redZone ? ' is-redzone' : ''}`}>
+              <span class="sit-text">{sitText}</span>
+              {redZone && (
+                <span class="sit-extra">
+                  <Icon name="zone" size={12} />
+                  Red zone
+                </span>
+              )}
+              {possLeft != null && possLeft < 6 && (
+                <span class="sit-extra">
+                  <Icon name="clock" size={12} />
+                  {possessionsText(possLeft)}
+                </span>
+              )}
+            </div>
+          )}
+          {live && <Field g={g} spot={spot} note={fieldNote(g)} />}
+          {live && spot && <DriveLine g={g} offenseId={spot.offenseId} />}
+          {ahead ? (
+            <div class="lastplay">
+              <div class="lp-label">
+                Last play<span class="lp-age"> · just in, details to follow</span>
+              </div>
+              {/* No swing badge here: the summary may be several plays behind, so a difference would span them all. */}
+              <div class="lp-text">{ahead.text}</div>
+            </div>
+          ) : headline && (
+            <div class="lastplay">
+              <div class="lp-label">
+                {pivot ? `Play of the game · ${periodLabel(pivot.period)} ${pivot.clock}` : live ? 'Last play' : 'Final play'}
+                {live && replay == null && headline.wallclock && <PlayAge at={headline.wallclock} />}
+              </div>
+              <div class="lp-text">{headline.text}</div>
+              {/* One badge on the surface: who the play swung toward. Its EPA is in Story, under Drives. */}
+              <div class="play-badges">
+                <WpDelta g={g} p={headline} />
+              </div>
+              {headClip && <ClipThumb clip={headClip} />}
+            </div>
+          )}
+          {g.plays.length > 0 && (
+            <button class="jump-row" onClick={() => pickTab('story')}>
+              <span class="sec-label">Win probability</span>
+              <span class="sec-head">{wpHeadline(g)}</span>
+              <span class="chev" aria-hidden="true" />
+            </button>
+          )}
+          {g.state !== 'pre' && <Glance g={g} onMore={() => pickTab('stats')} />}
+          {g.state === 'post' && clips.game.length > 0 && (
+            <div class="game-clips">
+              <h3 class="sub-title">Highlights</h3>
+              {clips.game.map((c) => (
+                <div class="game-clip" key={c.id}>
+                  <ClipThumb clip={c} />
+                  <span>{c.headline}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {tab === 'story' && (
+        <section class="tabpane" role="tabpanel">
+          {g.plays.length > 0 ? (
+            <WpChart g={g} marks={marks} clipIds={clipIds} selected={selected} onSelect={setSelected} />
+          ) : (
+            <p class="empty">The story starts at kickoff.</p>
+          )}
+          <h3 class="sub-title">Key plays</h3>
+          <KeyPlays g={g} marks={marks} clips={clips.byPlay} selected={selected} onSelect={setSelected} />
+          {g.drives.length > 0 && (
+            <>
+              <h3 class="sub-title">Drives</h3>
+              <Drives g={g} fresh={fresh} />
+            </>
+          )}
+        </section>
+      )}
+
+      {tab === 'stats' && (
+        <section class="tabpane" role="tabpanel">
+          <TeamStats g={g} />
+          {g.plays.length > 0 && (
+            <>
+              <h3 class="sub-title">How well they're playing</h3>
+              <Numbers g={g} epReady={!!ep} />
+            </>
+          )}
+          {g.state === 'post' && !g.truncated && <Advanced g={g} />}
+        </section>
+      )}
+
+      {tab === 'players' && (
+        <section class="tabpane" role="tabpanel">
+          <Players g={g} />
+        </section>
+      )}
 
       <Footer />
       <Dock
@@ -312,8 +455,8 @@ function Dock({ children, replay }: { children?: ComponentChildren; replay?: Com
 
 const sideWp = (g: Game, wpHome: number) => (wpHome >= 0.5 ? `${g.home.abbr} ${wpText(wpHome)}` : `${g.away.abbr} ${wpText(1 - wpHome)}`);
 
-// The closed row shows the game's shape (a sparkline) and one fact the card above doesn't: live, who's favoured now;
-// final, how long the winner was favoured.
+// The row that opens Story shows the game's shape (a sparkline) and one fact: live, who's favoured now; final, how
+// long the winner was favoured.
 function wpHeadline(g: Game): ComponentChildren {
   const pts = g.plays.filter((p) => p.wpHome != null);
   if (!pts.length) return null;
@@ -344,7 +487,8 @@ function wpHeadline(g: Game): ComponentChildren {
   }
   return (
     <span title={long}>
-      <WpSpark g={g} />
+      {/* Under eight points the sparkline is a flat stub that reads as broken. */}
+      {pts.length >= 8 && <WpSpark g={g} />}
       {text}
     </span>
   );
@@ -363,39 +507,51 @@ function WpSpark({ g }: { g: Game }) {
   );
 }
 
-function numbersHeadline(g: Game, epReady: boolean): string {
-  const A = teamNumbers(g, g.away);
-  const H = teamNumbers(g, g.home);
-  if (epReady && A.epaPerPlay != null && H.epaPerPlay != null)
-    return `EPA est. ${g.away.abbr} ${signed(A.epaPerPlay, 2)} · ${g.home.abbr} ${signed(H.epaPerPlay, 2)}`;
-  // A team without a snap yet says so in words; a bare dash beside a name reads like a minus sign.
-  const side = (abbr: string, v: number | null) => (v == null ? `${abbr} no snaps yet` : `${abbr} ${pct(v)}`);
-  return `Success ${side(g.away.abbr, A.successRate)} · ${side(g.home.abbr, H.successRate)}`;
+function tabLabel(t: Tab, g: Game): string {
+  if (t === 'now') return g.state === 'pre' ? 'Preview' : g.state === 'post' ? 'Final' : 'Live';
+  return t === 'story' ? 'Story' : t === 'stats' ? 'Stats' : 'Players';
 }
 
-function drivesHeadline(g: Game): string | null {
-  const now = g.drives.find((d) => d.isLive);
-  if (now) {
-    const snaps = now.plays.filter((p) => p.kind === 'pass' || p.kind === 'rush').length;
-    return `${now.abbr} driving · ${snaps} plays, ${Math.round(now.endPos - now.startPos)} yds`;
-  }
-  if (!g.drives.length) return null;
-  const scores = g.drives.filter((d) => d.cap === 'td' || d.cap === 'fg').length;
-  return `${g.drives.length} drives · ${scores} scores`;
+// What the field says when there's no ball on it.
+function fieldNote(g: Game): string | undefined {
+  if (g.statusName === 'STATUS_HALFTIME') return 'HALFTIME';
+  if (g.statusName === 'STATUS_END_PERIOD') return g.period >= 4 ? 'OVERTIME NEXT' : `END OF ${periodLabel(g.period)}`;
+  return g.lastPlay?.scoring ? 'KICKOFF NEXT' : undefined;
 }
 
-// "Daniels 289 · Purdy 241 yds": each side's leading passer, away first. In a replay the box score is the final one,
-// so the row says so instead of giving the ending away.
-function playersHeadline(g: Game): string | null {
-  if (g.truncated) return 'Final box score';
-  const leaders = [g.away, g.home].map((t) => {
-    const cat = g.box?.players?.find((p) => p.team.id === t.id)?.statistics.find((s) => s.name === 'passing');
-    const a = cat?.athletes[0];
-    const yds = cat ? a?.stats[cat.labels.indexOf('YDS')] : undefined;
-    const name = (a?.athlete.shortName ?? a?.athlete.displayName ?? '').split(' ').slice(-1)[0];
-    return a && yds ? `${name} ${yds}` : null;
-  });
-  return leaders.every(Boolean) ? `${leaders.join(' · ')} yds` : null;
+// Giveaways so far. ESPN's box score is the truth, but in a replay it's the final one, so count the plays instead.
+function turnoverCounts(g: Game): { away: number; home: number } {
+  const fromBox = (id: string) => Number(g.box?.teams?.find((t) => t.team.id === id)?.statistics.find((s) => s.name === 'turnovers')?.displayValue);
+  const a = fromBox(g.away.id);
+  const h = fromBox(g.home.id);
+  if (!g.truncated && Number.isFinite(a) && Number.isFinite(h)) return { away: a, home: h };
+  const lost = (p: Play) => (p.endTeamId === p.offenseId ? p.defenseId : p.offenseId); // a muffed punt is the returner's
+  const tos = g.plays.filter((p) => p.turnover);
+  return { away: tos.filter((p) => lost(p) === g.away.id).length, home: tos.filter((p) => lost(p) === g.home.id).length };
+}
+
+// Two rows from the Stats tab, the ones a glance wants: who's moving the ball, who's had it. (Turnovers are already
+// under each score.)
+const GLANCE = ['totalYards', 'possessionTime'];
+
+function Glance({ g, onMore }: { g: Game; onMore: () => void }) {
+  if (g.truncated) return null; // a replay's box score is the final one
+  const rows = compareRows(g).filter((r) => GLANCE.includes(r.key));
+  if (!rows.length) return null;
+  return (
+    <div class="glance">
+      <Compare
+        g={g}
+        lines={GLANCE.map((k) => rows.find((r) => r.key === k))
+          .filter((r): r is CompareRow => !!r)
+          .map((r) => ({ key: r.key, label: r.label, away: r.away, home: r.home, av: r.av, hv: r.hv, win: edge(r), icon: r.icon, bar: true }))}
+      />
+      <button class="jump-row is-small" onClick={onMore}>
+        <span class="sec-label">All team stats</span>
+        <span class="chev" aria-hidden="true" />
+      </button>
+    </div>
+  );
 }
 
 function possessionsText(n: number): string {
@@ -408,7 +564,7 @@ function withScore(t: TeamInfo, s: number | undefined): TeamInfo {
   return s != null && Number.isFinite(s) && s > t.score ? { ...t, score: s } : t;
 }
 
-function TeamCell({ t, poss, tos, pre }: { t: TeamInfo; poss: boolean; tos: number | null; pre: boolean }) {
+function TeamCell({ t, poss, tos, giveaways, pre }: { t: TeamInfo; poss: boolean; tos: number | null; giveaways: number; pre: boolean }) {
   return (
     <div class={`sbar-team ${t.side}`} style={teamVars(t)}>
       {t.logo && <Logo src={smallLogo(t.logo, 80)} abbr={t.abbr} size={32} />}
@@ -416,35 +572,40 @@ function TeamCell({ t, poss, tos, pre }: { t: TeamInfo; poss: boolean; tos: numb
       {/* Before kickoff the record, not a 0 that reads like a score. */}
       <span class={`score${pre ? ' is-pre' : ''}`}>{pre ? t.record : t.score}</span>
       {poss && <span class="poss" aria-label="has the ball" />}
-      {tos != null && (
-        <span class="tos" aria-label={`${tos} timeouts left`}>
-          {[0, 1, 2].map((i) => (
-            <span key={i} class={`to${i >= tos ? ' used' : ''}`} />
-          ))}
+      {!pre && (
+        <span class="sbar-glyphs">
+          {tos != null && (
+            <span class="tos" aria-label={`${tos} timeouts left`} title={`${tos} timeouts left`}>
+              {[0, 1, 2].map((i) => (
+                <span key={i} class={`to${i >= tos ? ' used' : ''}`} />
+              ))}
+            </span>
+          )}
+          {giveaways > 0 && (
+            <span class="giveaways" aria-label={`${giveaways} turnover${giveaways === 1 ? '' : 's'}`} title={`${giveaways} turnover${giveaways === 1 ? '' : 's'}`}>
+              <Icon name="turnover" size={12} />
+              {giveaways}
+            </span>
+          )}
         </span>
       )}
     </div>
   );
 }
 
-function CurrentDrive({ g }: { g: Game }) {
-  const d = g.drives.find((x) => x.isLive)!;
+// Under the field: the drive in words, since the field shows it in yards.
+function DriveLine({ g, offenseId }: { g: Game; offenseId: string }) {
+  const d = g.drives.find((x) => x.isLive && x.teamId === offenseId);
+  if (!d) return null;
   const t = d.teamId === g.home.id ? g.home : g.away;
-  const snaps = d.plays.filter((p) => p.kind === 'pass' || p.kind === 'rush');
-  const lo = Math.min(d.startPos, d.endPos);
-  const hi = Math.max(d.startPos, d.endPos);
+  const snaps = d.plays.filter((p) => (p.kind === 'pass' || p.kind === 'rush') && !p.noPlay);
   const yards = Math.round(d.endPos - d.startPos);
   return (
-    <div class="curdrive" style={teamVars(t)}>
-      <div class="cd-track">
-        <span class="cd-bar" style={{ left: `${lo}%`, width: `${Math.max(0.8, hi - lo)}%` }} />
-        {snaps.map((p) => (
-          <span class="cd-tick" key={p.id} style={{ left: `${100 - p.ytg}%` }} />
-        ))}
-      </div>
-      <div class="cd-meta">
-        {t.abbr} drive · {snaps.length} plays · {yards} yds
-      </div>
+    <div class="driveline" style={teamVars(t)}>
+      <Icon name="ball" size={14} />
+      <b>{t.abbr} drive</b>
+      <span>{snaps.length} plays</span>
+      <span>{yards} yds</span>
     </div>
   );
 }

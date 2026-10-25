@@ -67,7 +67,7 @@ export function teamNumbers(g: Game, team: TeamInfo): TeamNumbers {
 
 // Late in the 4th: how many possessions are left, from this game's own average drive length.
 export function possessionsLeft(g: Game): number | null {
-  if (g.state !== 'in' || g.period !== 4 || !g.lastPlay) return null;
+  if (g.state !== 'in' || g.period !== 4 || g.statusName === 'STATUS_END_PERIOD' || !g.lastPlay) return null;
   const done = g.drives.filter((d) => !d.isLive && d.elapsed);
   if (done.length < 6) return null;
   const avg = done.reduce((a, d) => a + clockLeft(d.elapsed), 0) / done.length;

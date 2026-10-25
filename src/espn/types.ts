@@ -136,6 +136,16 @@ export interface EspnBoxPlayerCategory {
   athletes: { athlete: { id: string; displayName: string; shortName?: string; position?: { abbreviation: string } }; stats: string[] }[];
 }
 
+export interface EspnVideo {
+  id: number;
+  headline: string;
+  duration?: number; // seconds
+  originalPublishDate?: string;
+  thumbnail?: string;
+  links?: { web?: { href?: string }; source?: { href?: string } };
+  tracking?: { coverageType?: string }; // "OnePlay" for a single-play clip
+}
+
 export interface EspnSummary {
   header: {
     id: string;
@@ -151,6 +161,8 @@ export interface EspnSummary {
   };
   scoringPlays?: EspnPlay[];
   situation?: EspnSituation;
+  /** ESPN's highlight clips for the game. Not tied to play ids; see ../espn/clips. */
+  videos?: EspnVideo[];
   pickcenter?: { details?: string; overUnder?: number; provider?: { name: string } }[];
   meta?: { lastUpdatedAt?: string; lastPlayWallClock?: string; gameState?: string };
 }

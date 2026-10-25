@@ -1,6 +1,6 @@
 # Gridiron
 
-A phone-first live NFL viewer with no ads and no betting lines. Each game opens on the gist (the score, the situation, the last play and how much it swung win probability), with win probability, the numbers that say how each team is actually playing, the drive chart and the box score one tap down, each closed row carrying its own one-line answer.
+A phone-first live NFL viewer with no ads and no betting lines. Each game opens on the field (where the ball is, the line to gain, the drive so far and the last snap), with the game's story, a head-to-head of the team stats and the box score one tab away.
 
 Live at https://mikemakegame.github.io/Gridiron/ (GitHub Pages; add it to your phone's home screen).
 
@@ -8,14 +8,13 @@ A personal, non-commercial project. Not affiliated with ESPN, the NFL or any tea
 
 ## What it shows
 
-- **Scoreboard**: every game of the week, live ones first, with down & distance and a win-probability bar. ESPN is polled only while a game is live (every 15 s; 30 s at halftime). Before kickoff, after the final, or in a week with nothing on, the page fetches once and then only when you tap the freshness pill. The arrows step through the regular season and on into the playoffs, using ESPN's own calendar; a browsed week stays in the link (`#/w/2026-3-1` is the Wild Card round) and survives opening a game.
-- **Game page**
-  - on top: the sticky score bar, the situation, and the last play (on a final, the play of the game) with its win-probability swing
-  - then closed rows, each with a one-line answer, remembered open or closed on your device:
-    - **Win probability**: a sparkline in the row, the whole-game chart inside; drag it to read any play
-    - **Numbers**, live: success rate, EPA/play (est.), yards/play, explosive plays, and five more behind "more"; after the game, nflverse's model numbers (EPA pass/rush, CPOE, pass rate over expected, top plays by EPA and WPA)
-    - **Drives**: one row per drive, every drive attacking rightward, the current drive on a 100-yard strip; tap a row for its plays
-    - **Players**: the box score (passing, rushing, receiving; defense, kicking, returns behind one tap)
+- **Scoreboard**: every game of the week as tiles, live ones first, with down & distance and a win-probability bar along each live tile's bottom edge; two columns on a wide screen. ESPN is polled only while a game is live (every 15 s; 30 s at halftime). Before kickoff, after the final, or in a week with nothing on, the page fetches once and then only when you tap the freshness pill. The arrows step through the regular season and on into the playoffs, using ESPN's own calendar; a browsed week stays in the link (`#/w/2026-3-1` is the Wild Card round) and survives opening a game.
+- **Game page**: a sticky score bar (timeouts as dots, turnovers with an icon) over four tabs; the open tab is in the link (`#/g/<id>/stats`)
+  - **Live** (Preview before kickoff, Final after): the situation, a little football field (end zones in team colours, line of scrimmage in blue, line to gain in yellow, the red zone the offense is driving at, the drive so far, the last snap's path), the last play (on a final, the play of the game) with its win-probability swing, and three stats at a glance
+  - **Story**: the whole-game win-probability chart with a rail of markers under it (touchdowns, field goals, turnovers, big swings, and any play with a highlight clip), the same plays as a list, then the drives. A live game opens on Live; a final opens here
+  - **Stats**: who's winning more of the numbers, then ESPN's team stats head to head (each with a bar from the middle out; the better side keeps its colour), then the numbers that say how each team is actually playing (success rate, EPA/play est., explosive plays and more); after the game, nflverse's model numbers
+  - **Players**: the box score (passing, rushing, receiving; defense, kicking, returns behind one tap)
+  - **Highlight clips**: ESPN posts one-play clips for some games, 6-20 minutes after the snap, without saying which play they show. Gridiron pins each to its play by the names and yardage in the headline and the time it was posted (`src/espn/clips.ts`); a pinned clip shows as a thumbnail that opens ESPN's own player. Many games get none during the game.
   - every stat name explains itself: tap it (or hover with a mouse) for one sentence
   - a bottom dock where the thumb is: back to the week, and the game's one action (the freshness pill live or before kickoff: green under 30 s, amber past 45 s, red past 2 min, tap to refetch; Replay on a final)
   - finished games can be replayed play by play "as if live", from the dock
@@ -89,7 +88,7 @@ For a fork: in the repository's settings, set Pages to build from GitHub Actions
 - **Advanced stats**: [nflverse](https://github.com/nflverse/nflverse-data) play-by-play (nflfastR models), licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Gridiron changes it: it sums the plays into per-game team and quarterback numbers, and builds the expected-points table behind the live EPA estimate from past seasons (see above). The app's footer carries the same credit and links. The repo doesn't store the derived data; the workflow rebuilds it.
 - **Code**: MIT (see `LICENSE`), which covers the code only, not ESPN's data, nflverse's data, or team names and logos.
 - **Font**: Barlow Condensed (SIL Open Font License), served from this site; see `src/fonts/README.md`.
-- **Privacy**: no ads, no analytics, no cookies. Your browser talks to this site and to ESPN (scores and logos), nothing else.
+- **Privacy**: no ads, no analytics, no cookies. Your browser talks to this site and to ESPN (scores, logos, and clip thumbnails from ESPN's image CDN), nothing else; a clip link or thumbnail on any other host is dropped.
 
 ## Layout
 

@@ -3,7 +3,7 @@ import { getScoreboard, SNAPSHOT, type WeekRef } from '../espn/api';
 import { boardInterval } from '../espn/cadence';
 import type { EspnEvent, EspnScoreboard } from '../espn/types';
 import { clockLabel, teamInfo, type TeamInfo } from '../espn/model';
-import { kickoffText, smallLogo, teamVars } from '../format';
+import { apart, kickoffText, smallLogo, teamVars } from '../format';
 import { usePoll } from '../hooks/usePoll';
 import { Fresh } from './Fresh';
 import { Logo } from './Logo';
@@ -11,6 +11,7 @@ import { linkTo, setBoardWeek, useBoardWeek } from '../route';
 import { stepWeek, weekKey, weekLabel, weekStops } from '../weeks';
 import { setTheme, useTheme, type Theme } from '../theme';
 import { Fold } from './Fold';
+import { Icon } from './Icons';
 import { useKeys } from '../hooks/useKeys';
 
 // Poll only while a listed game is live (see ../espn/cadence); otherwise one fetch, and the pill refetches on a tap.
@@ -117,9 +118,7 @@ function Group({ title, games }: { title: string; games: EspnEvent[] }) {
   if (!games.length) return null;
   return (
     <>
-      <h2 class="sb-group">
-        {title} · {games.length}
-      </h2>
+      <h2 class="sb-group">{title}</h2>
       {games.map((e) => (
         <GameCard key={e.id} e={e} />
       ))}
@@ -148,7 +147,7 @@ function GameCard({ e }: { e: EspnEvent }) {
   const c = e.competitions[0];
   const st = e.status.type.state;
   const away = teamInfo(c.competitors.find((x) => x.homeAway === 'away')!);
-  const home = teamInfo(c.competitors.find((x) => x.homeAway === 'home')!);
+  const home = apart(away, teamInfo(c.competitors.find((x) => x.homeAway === 'home')!));
   const sit = c.situation;
   const wp = sit?.lastPlay?.probability?.homeWinPercentage;
   const close = st === 'in' && (e.status.period ?? 0) >= 4 && Math.abs(home.score - away.score) <= 8;
@@ -176,8 +175,16 @@ function GameCard({ e }: { e: EspnEvent }) {
         status && <span class="sb-ot" title="Decided in overtime">{status}</span>
       ) : (
         <div class="sb-side">
-          <div class="sb-status">{status}</div>
-          {st === 'in' && sit?.downDistanceText && <div class={`sb-sit${sit.isRedZone ? ' is-redzone' : ''}`}>{sit.downDistanceText}</div>}
+          <div class="sb-status">
+            {st === 'in' && <Icon name="clock" size={14} />}
+            {status}
+          </div>
+          {st === 'in' && sit?.downDistanceText && (
+            <div class={`sb-sit${sit.isRedZone ? ' is-redzone' : ''}`}>
+              {sit.isRedZone && <Icon name="zone" size={12} label="Red zone" />}
+              {sit.downDistanceText}
+            </div>
+          )}
           {st === 'pre' && meta && <div class="sb-meta">{meta}</div>}
         </div>
       )}

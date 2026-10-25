@@ -1,6 +1,7 @@
 // Turns ESPN's summary JSON into the one Game shape every component reads.
 import type { EspnCompetitor, EspnDrive, EspnPlay, EspnSituation, EspnSummary, EspnTeam } from './types';
 import { estimateEpa, type EpTable } from '../stats/ep';
+import { apart } from '../format';
 
 export type PlayKind = 'pass' | 'rush' | 'kick' | 'punt' | 'fg' | 'xp' | 'penalty' | 'other';
 
@@ -79,6 +80,9 @@ export interface Drive {
 export interface Situation {
   text: string; // "3rd & 4 · SF 38"
   possessionId: string;
+  ytg: number | null; // yards to the end zone for the team with the ball; null when the spot is unknown
+  down: number;
+  distance: number;
   redZone: boolean;
   homeTimeouts: number | null;
   awayTimeouts: number | null;
@@ -243,8 +247,8 @@ export function buildGame(s: EspnSummary, opts: BuildOptions = {}): Game {
   const comp = s.header.competitions[0];
   const homeC = comp.competitors.find((c) => c.homeAway === 'home')!;
   const awayC = comp.competitors.find((c) => c.homeAway === 'away')!;
-  const home = teamInfo(homeC);
   const away = teamInfo(awayC);
+  const home = apart(away, teamInfo(homeC));
   const seasonType = s.header.season?.type ?? 2;
   const otLen = seasonType === 3 ? 900 : 600;
   const abbrOf = (id: string) => (id === home.id ? home.abbr : id === away.id ? away.abbr : '');
@@ -428,8 +432,9 @@ export function buildGame(s: EspnSummary, opts: BuildOptions = {}): Game {
     wpPoints,
     regulationSec,
     otLen,
+    // No snap to describe at halftime, or at the end of regulation (overtime opens with a coin toss).
     situation:
-      state === 'in' && status.type.name !== 'STATUS_HALFTIME'
+      state === 'in' && status.type.name !== 'STATUS_HALFTIME' && !(status.type.name === 'STATUS_END_PERIOD' && period >= 4 && !truncated)
         ? situationOf(truncated ? undefined : s.situation, lastPlay, home, away, truncated ? undefined : opts.timeouts)
         : null,
     lastPlay,
@@ -481,6 +486,9 @@ function situationOf(
     return {
       text: [dd, spot].filter(Boolean).join(' · ') || sit.downDistanceText || '',
       possessionId: sit.possession,
+      ytg,
+      down: sit.down ?? 0,
+      distance: sit.distance ?? 0,
       redZone: !!sit.isRedZone,
       homeTimeouts: sit.homeTimeouts ?? null,
       awayTimeouts: sit.awayTimeouts ?? null,
@@ -493,6 +501,9 @@ function situationOf(
   return {
     text: [dd, fieldText(last.endYtg, abbr(pos), abbr(other(pos)))].filter(Boolean).join(' · '),
     possessionId: pos,
+    ytg: last.endYtg,
+    down: last.endDown,
+    distance: last.endDistance,
     redZone: last.endYtg <= 20 && last.endDown > 0,
     homeTimeouts: timeouts?.home ?? null,
     awayTimeouts: timeouts?.away ?? null,
