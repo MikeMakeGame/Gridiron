@@ -22,4 +22,13 @@ export const GLOSSARY: Record<string, string> = {
   aDOT: 'Average depth of target: how far past the line passes travel in the air.',
   'YAC%': 'Share of passing yards gained after the catch.',
   'Win probability': "ESPN's model of each team's chance to win, updated after every play.",
+  'League average':
+    "The NFL's average per team game (rates pooled over every play), from nflverse. ▲ / ▼ shows the gap; green is better. Rates are compared live; totals like yards only after the final. No all-time average: the passing era, rule changes and the 2024 kickoff rule make old numbers a different sport.",
+  Impact:
+    'Expected points this player added: EPA on his dropbacks, runs and targets; for defenders, what their sacks, takeaways, tackles for loss and pass breakups cost an offense on average; for kickers, points over the league make rate from that distance.',
+  'EPA / dropback': 'Expected points added per pass, sack or scramble.',
+  'EPA / carry': 'Expected points added per designed run.',
+  'EPA / target': 'Expected points added on passes thrown to him.',
+  'Sack rate': 'Sacks per dropback.',
+  'Tackles for loss': 'Tackles behind the line of scrimmage, sacks included, as the box score counts them.',
 };

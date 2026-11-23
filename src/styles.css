@@ -1,7 +1,9 @@
 /* GRIDIRON — "Chyron on ink": broadcast score-bug tabs and ledger rules on true black; numbers are the only loud thing.
    Font: Barlow Condensed 500/700 (display, labels, every numeral) + system-ui for prose. Served from this site
    (src/fonts, SIL Open Font License), so the page talks to no font host.
-   Team colour --tc is lifted to a shared lightness in OKLCH (--ta) so navy, maroon and black all read on ink. */
+   Team colour --tc is lifted to a shared lightness in OKLCH (--ta) so navy, maroon and black all read on ink.
+   Team tiles (`.has-fill`) wear the team's own colour instead, unlifted, in both looks: --fill, its text --on-fill
+   (picked by contrast in src/espn/colors.ts) and the stripe --fill2. Day borders those tiles rather than muting them. */
 
 @font-face { font-family: 'Barlow Condensed'; font-style: normal; font-weight: 500; font-display: swap;
   src: url('./fonts/barlow-condensed-500-latin.woff2') format('woff2');
@@ -19,6 +21,7 @@
   --body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --pad: 0px;
   --page: #000; --hi: #fff; --sheen: 255 255 255; --on-ta: #050607; --on-bad: #1a0605;
+  --tile-edge: rgb(255 255 255 / .14); /* the hairline round a team tile, so navy and black fills still end on ink */
   color-scheme: dark;
 }
 
@@ -30,22 +33,25 @@
   --tx: #0b0d10; --tx2: #3d4651; --tx3: #5c6570; --tx4: #4d5661;
   --live: #0a7a3e; --warn: #8a5200; --bad: #c4251c; --ball: #8a5a20;
   --hi: #0b0d10; --sheen: 0 0 0; --on-ta: #ffffff; --on-bad: #ffffff;
+  --tile-edge: rgb(0 0 0 / .32); /* gold, tan, silver and white fills need an edge on paper in sunlight */
   color-scheme: light;
 }
 
-/* accent = team primary, lifted on night (or pulled darker on day). Fallback is the raw colour. */
+/* accent = team primary, lifted on night (or pulled darker on day). Fallback is the raw colour. The numbers (.64 and
+   1.35, .46 and 1.1) are LINE in src/espn/colors.ts (a test checks they match). When the home side's lines would read
+   as the away side's, its --ta-ln / --ta-ld set their lightness instead (colors.ts liftFor): lightness, never hue. */
 .sb-team, .sbar-team, .drive, .pl-team, .nums-head .v, .wp-label, .sb-wp-away, .sb-wp-home, .wpd, .spark,
-.fld-team, .fld-ez, .cmp-team, .cmp-v, .cmp-half i, .tk, .tally-side, .tally-lead, .mk, .kp, .wp-dot, .driveline {
+.fld-team, .fld-ez, .cmp-team, .cmp-v, .cmp-half i, .tk, .tally-side, .tally-lead, .mk, .kp, .wp-dot, .driveline, .so-card {
   --ta: var(--tc, #9aa3ad);
 }
 @supports (color: oklch(from red l c h)) {
   .sb-team, .sbar-team, .drive, .pl-team, .nums-head .v, .wp-label, .sb-wp-away, .sb-wp-home, .wpd, .spark,
-  .fld-team, .fld-ez, .cmp-team, .cmp-v, .cmp-half i, .tk, .tally-side, .tally-lead, .mk, .kp, .wp-dot, .driveline {
-    --ta: oklch(from var(--tc, #9aa3ad) max(l, .64) calc(c * 1.35) h);
+  .fld-team, .fld-ez, .cmp-team, .cmp-v, .cmp-half i, .tk, .tally-side, .tally-lead, .mk, .kp, .wp-dot, .driveline, .so-card {
+    --ta: oklch(from var(--tc, #9aa3ad) var(--ta-ln, max(l, .64)) calc(c * 1.35) h);
   }
   :root[data-theme="day"] :is(.sb-team, .sbar-team, .drive, .pl-team, .nums-head .v, .wp-label, .sb-wp-away, .sb-wp-home, .wpd, .spark,
-  .fld-team, .fld-ez, .cmp-team, .cmp-v, .cmp-half i, .tk, .tally-side, .tally-lead, .mk, .kp, .wp-dot, .driveline) {
-    --ta: oklch(from var(--tc, #5c6570) min(l, .46) calc(c * 1.1) h);
+  .fld-team, .fld-ez, .cmp-team, .cmp-v, .cmp-half i, .tk, .tally-side, .tally-lead, .mk, .kp, .wp-dot, .driveline, .so-card) {
+    --ta: oklch(from var(--tc, #5c6570) var(--ta-ld, min(l, .46)) calc(c * 1.1) h);
   }
 }
 
@@ -134,17 +140,20 @@ img { display: block; }
 }
 .sb-group::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 
+/* a tile is the matchup as a score bug: each team a band in its own colour (away on top), the clock and the down &
+   distance in a plain box on the right, the win-probability bar along the bottom */
 .sb-game {
-  display: grid; grid-template-columns: 1fr auto; column-gap: 16px; align-items: stretch;
-  padding: 12px 14px 12px 12px; border: 1px solid var(--line); border-left: 3px solid var(--line2); border-radius: 4px;
+  display: grid; grid-template-columns: 1fr auto; align-items: stretch;
+  border: 1px solid var(--line); border-left: 3px solid var(--line2); border-radius: 4px;
   position: relative; overflow: hidden; background: var(--bg);
 }
+:root[data-theme="day"] .sb-game { border-top-color: var(--line2); border-right-color: var(--line2); border-bottom-color: var(--line2); }
 .sb-game:hover { border-color: var(--line2); }
 .sb-game:active { background: var(--s2); }
 .sb-game.is-live { background: var(--s1); border-left-color: var(--live); }
 .sb-game.is-close { border-left-color: var(--warn); }
-.sb-teams { min-width: 0; display: grid; gap: 6px; }
-.sb-team { display: flex; align-items: center; gap: 10px; min-height: 30px; }
+.sb-teams { min-width: 0; display: grid; }
+.sb-team { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 7px 14px 7px 11px; }
 .sb-team .abbr { font-weight: 700; font-size: 22px; letter-spacing: .04em; min-width: 44px; line-height: 1; }
 .sb-team .rec { font: 500 13px/1 var(--disp); color: var(--tx3); letter-spacing: .06em; }
 .sb-team .poss { margin-left: -4px; }
@@ -156,12 +165,34 @@ img { display: block; }
 /* out of the grid, left of the scores, so every final's scores share one right edge */
 .sb-ot {
   position: absolute; top: 50%; right: 64px; transform: translateY(-50%);
-  font: 700 13px/1 var(--disp); letter-spacing: .14em; color: var(--tx2);
-  padding: 4px 6px 3px; box-shadow: inset 0 0 0 1px var(--line2);
+  font: 700 13px/1 var(--disp); letter-spacing: .14em; color: var(--tx2); z-index: 1;
+  padding: 4px 6px 3px; background: var(--bg); box-shadow: inset 0 0 0 1px var(--line2);
 }
 .sb-team.is-winner .score { color: var(--hi); }
 .sb-team .logo { border-radius: 50%; box-shadow: 0 0 0 1px rgb(var(--sheen) / .06); }
-.sb-side { display: flex; flex-direction: column; justify-content: center; align-items: flex-end; gap: 7px; min-width: 96px; max-width: 132px; text-align: right; }
+/* on its team's fill: every letter in the fill's own text colour (never dimmed, so it keeps its contrast); the
+   stripe is the team's other colour; the final's winner gets a notch pointing at its score, the loser a lighter score */
+.sb-team.has-fill { background: var(--fill); color: var(--on-fill); box-shadow: inset 0 -3px 0 var(--fill2); }
+.sb-team.has-fill .rec, .sb-team.has-fill.is-loser .abbr, .sb-team.has-fill.is-loser .rec,
+.sb-team.has-fill.is-loser .score, .sb-team.has-fill.is-winner .score { color: var(--on-fill); }
+/* the loser's score is lighter and smaller, filled or not, so the result never rests on colour alone */
+.sb-team.is-loser .score { font-weight: 500; font-size: 24px; }
+.sb-team.has-fill.is-loser .logo { opacity: 1; }
+.sb-team.has-fill .logo { box-shadow: none; }
+/* the winner: a mark at the band's edge pointing at its score, in the fill's own text colour (4.5:1 or better) */
+.sb-team.is-winner { position: relative; }
+.sb-team.is-winner::after {
+  content: ""; position: absolute; right: 2px; top: 50%; margin-top: -6px;
+  border: 6px solid transparent; border-left-width: 0; border-right-color: var(--on-fill, var(--tx));
+}
+/* two fills that read as one even after the home side tried its other colour: a gap of page between them */
+.sb-team.is-split { border-top: 3px solid var(--bg); }
+.has-fill .poss { box-shadow: 0 0 0 1.5px var(--on-fill); }
+.has-fill .logo-ph { background: none; color: var(--on-fill); box-shadow: inset 0 0 0 1px var(--on-fill); }
+.sb-side {
+  display: flex; flex-direction: column; justify-content: center; align-items: flex-end; gap: 7px; min-width: 110px; max-width: 146px;
+  padding: 8px 14px 8px 12px; text-align: right;
+}
 .sb-status { display: inline-flex; align-items: center; gap: 6px; font: 700 19px/1 var(--disp); letter-spacing: .04em; text-transform: uppercase; }
 .sb-status .icon { color: var(--tx3); }
 .sb-game.is-live .sb-status .icon { color: var(--live); }
@@ -171,8 +202,8 @@ img { display: block; }
 .sb-sit, .sb-meta { display: inline-flex; align-items: center; justify-content: flex-end; gap: 5px; font: 500 13px/1.15 var(--disp); letter-spacing: .06em; text-transform: uppercase; color: var(--tx2); }
 .sb-meta .icon { color: var(--tx3); }
 .sb-sit.is-redzone { color: var(--bad); font-weight: 700; }
-/* the win-probability bar is the tile's bottom edge */
-.sb-wp { position: absolute; left: 0; right: 0; bottom: 0; display: flex; gap: 2px; height: 3px; }
+/* the win-probability bar is the tile's bottom edge, under the bands (never on a fill of its own colour) */
+.sb-wp { grid-column: 1 / -1; display: flex; gap: 2px; height: 4px; }
 .sb-wp-away, .sb-wp-home { height: 100%; background: var(--ta); }
 .sb-wp-away { border-radius: 2px 0 0 2px; }
 .sb-wp-home { border-radius: 0 2px 2px 0; }
@@ -184,16 +215,28 @@ img { display: block; }
   margin-inline: calc(-1 * var(--gl)) calc(-1 * var(--gr));
 }
 .game-head .scorebar { margin-inline: 0; }
+/* each half runs to its screen edge, in its team's fill when it has one; the clock sits between them on the page */
 .scorebar {
   display: grid; grid-template-columns: 1fr auto 1fr; align-items: stretch;
-  padding: 0 var(--gr) 0 var(--gl); min-height: 72px; border-bottom: 1px solid var(--line2);
+  padding: 0; min-height: 72px; border-bottom: 1px solid var(--line2);
 }
 .sbar-team {
   display: grid; align-items: center; column-gap: 8px; padding: 8px 0 7px; border-bottom: 3px solid var(--ta);
   margin-bottom: -1px; min-width: 0;
 }
-.sbar-team.away { grid-template-columns: 34px auto 1fr; justify-items: start; }
-.sbar-team.home { grid-template-columns: 1fr auto 34px; justify-items: end; text-align: right; }
+.sbar-team.away { grid-template-columns: 34px auto 1fr; justify-items: start; padding-left: var(--gl); padding-right: 8px; }
+.sbar-team.home { grid-template-columns: 1fr auto 34px; justify-items: end; text-align: right; padding-right: var(--gr); padding-left: 8px; }
+.sbar-team.has-fill { background: var(--fill); color: var(--on-fill); border-bottom-color: var(--fill2); box-shadow: inset 0 0 0 1px var(--tile-edge); }
+/* a final: the winner's mark (in the ball's slot, pointing at the score), the loser's score lighter and smaller */
+.win-mark { grid-row: 2; align-self: center; width: 0; height: 0; border: 7px solid transparent; }
+.sbar-team.away .win-mark { grid-column: 3; border-left-width: 0; border-right-color: currentColor; }
+.sbar-team.home .win-mark { grid-column: 1; border-right-width: 0; border-left-color: currentColor; }
+.sbar-team.is-loser .score { font-weight: 500; font-size: 32px; }
+.sbar-team.has-fill .abbr, .sbar-team.has-fill .score.is-pre { color: var(--on-fill); }
+.sbar-team.has-fill .to { background: var(--on-fill); }
+.sbar-team.has-fill .to.used { background: none; box-shadow: inset 0 0 0 1px var(--on-fill); }
+/* turnovers keep their red on a chip of page, since a red fill would swallow them */
+.sbar-team.has-fill .giveaways { padding: 3px 5px 2px; background: var(--bg); border-radius: 2px; }
 .sbar-team .logo { width: 34px; height: 34px; grid-row: 1 / 3; }
 .sbar-team.away .logo { grid-column: 1; }
 .sbar-team.home .logo { grid-column: 3; }
@@ -227,6 +270,8 @@ img { display: block; }
 .tab.is-on { color: var(--tx); box-shadow: inset 0 -3px 0 var(--tx); }
 .tab:disabled { opacity: .35; cursor: default; }
 .tab-dot { position: absolute; top: 11px; margin-left: 4px; width: 6px; height: 6px; border-radius: 50%; background: var(--live); }
+/* five tabs on a narrow phone: tighter letters so "Standouts" fits */
+@media (max-width: 420px) { .tab { font-size: 12.5px; letter-spacing: .06em; } }
 
 .icon { flex: none; display: inline-block; vertical-align: middle; --icon-cut: var(--bg); }
 
@@ -335,8 +380,8 @@ img { display: block; }
 .wp-label { font: 700 11px var(--disp); letter-spacing: .14em; fill: var(--ta); paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
 .wp-now-label { --ta: var(--tc, #9aa3ad); } /* .wp-label takes the lifted accent from the shared rule at the top */
 @supports (color: oklch(from red l c h)) {
-  .wp-now-label { --ta: oklch(from var(--tc, #9aa3ad) max(l, .64) calc(c * 1.35) h); }
-  :root[data-theme="day"] .wp-now-label { --ta: oklch(from var(--tc, #5c6570) min(l, .46) calc(c * 1.1) h); }
+  .wp-now-label { --ta: oklch(from var(--tc, #9aa3ad) var(--ta-ln, max(l, .64)) calc(c * 1.35) h); }
+  :root[data-theme="day"] .wp-now-label { --ta: oklch(from var(--tc, #5c6570) var(--ta-ld, min(l, .46)) calc(c * 1.1) h); }
 }
 .wp-now-label { font: 700 14px var(--disp); letter-spacing: .06em; fill: var(--ta); paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
 .lp-age { color: var(--tx3); letter-spacing: .08em; }
@@ -388,6 +433,13 @@ img { display: block; }
 .cmp { display: grid; }
 .cmp-head { display: flex; justify-content: space-between; padding-bottom: 8px; border-bottom: 1px solid var(--line2); }
 .cmp-team { font: 700 16px/1 var(--disp); letter-spacing: .12em; padding-bottom: 6px; box-shadow: inset 0 -3px 0 var(--ta); }
+/* a column's head as a name plate in its team's fill (team abbreviations on Stats, player names in the compare) */
+.cmp-head:has(.cmp-team.has-fill) { gap: 8px; }
+.cmp-team.has-fill {
+  flex: 1 1 0; min-width: 0; padding: 7px 9px 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background: var(--fill); color: var(--on-fill); box-shadow: inset 0 -3px 0 var(--fill2), inset 0 0 0 1px var(--tile-edge);
+}
+.cmp-team.home.has-fill { text-align: right; }
 .cmp-row {
   display: grid; grid-template-columns: minmax(64px, 1fr) auto minmax(64px, 1fr); align-items: center; column-gap: 10px; row-gap: 7px;
   padding: 13px 0 12px; border-bottom: 1px solid var(--line);
@@ -406,6 +458,26 @@ img { display: block; }
 .cmp-half i { display: block; height: 100%; background: var(--ta); border-radius: 3px; }
 .cmp-half i.is-worse { background: var(--line2); }
 .cmp-tip { grid-column: 1 / -1; margin: 2px 0 0; }
+/* against the league average: a quiet arrow and gap under the number, and a tick on the bar where the average sits */
+.avg-d { display: block; margin-top: 5px; font: 500 12px/1 var(--disp); letter-spacing: .06em; color: var(--tx3); }
+.avg-d.is-good { color: var(--live); }
+.avg-d.is-bad { color: var(--bad); }
+.cmp-half { position: relative; }
+.cmp-avg { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--tx2); }
+.cmp-half.away .cmp-avg { right: var(--at); margin-right: -1px; }
+.cmp-half.home .cmp-avg { left: var(--at); margin-left: -1px; }
+
+/* the average switch: a labelled pair of buttons, the pressed one filled */
+.base-switch { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 18px; }
+.base-k { font: 700 13px/1 var(--disp); letter-spacing: .14em; text-transform: uppercase; color: var(--tx2); }
+.base-opts { display: inline-flex; box-shadow: inset 0 0 0 1px var(--line2); border-radius: 16px; }
+.base-opt {
+  height: 32px; padding: 0 12px; border-radius: 16px; white-space: nowrap;
+  font: 700 13px/1 var(--disp); letter-spacing: .08em; text-transform: uppercase; color: var(--tx3);
+}
+.base-opt.is-on { color: var(--tx); background: var(--s2); box-shadow: inset 0 0 0 1px var(--tx3); }
+.base-opt:disabled { opacity: .4; cursor: default; }
+.base-tip { flex-basis: 100%; margin: 0; }
 
 /* the tally: how many rows each side won, as ticks */
 .tally { margin-bottom: 22px; }
@@ -420,10 +492,6 @@ img { display: block; }
 
 /* the timeline rail under the win-probability chart: one marker per key play, shaped like the drive caps */
 .wp-rail { position: relative; height: 38px; margin-top: 4px; border-top: 1px solid var(--line); }
-.mk-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; font: 500 12px/1 var(--disp); letter-spacing: .1em; text-transform: uppercase; color: var(--tx3); }
-.mk-legend span { display: inline-flex; align-items: center; gap: 2px; }
-.mk-legend .mk { width: 20px; height: 20px; --ta: var(--tx2); }
-.mk-legend .mk-shape { transform: scale(.8); }
 .wp-guide { stroke: var(--tx3); stroke-width: 1; stroke-opacity: .35; stroke-dasharray: 2 3; }
 .wp-guide.is-sel { stroke: var(--tx); stroke-opacity: .8; stroke-dasharray: none; }
 .wp-dot { fill: var(--ta); stroke: var(--bg); stroke-width: 1.5; }
@@ -440,10 +508,22 @@ img { display: block; }
 .mk-fg .mk-shape { clip-path: polygon(50% 0, 100% 100%, 0 100%); background: var(--ta); width: 16px; }
 .mk-miss .mk-shape { clip-path: polygon(50% 0, 100% 100%, 0 100%); background: var(--warn); width: 16px; }
 .mk-miss .mk-shape::after { content: ""; position: absolute; inset: 5px 4.5px 0; clip-path: polygon(50% 0, 100% 100%, 0 100%); background: var(--bg); }
-.mk-int .mk-shape::before, .mk-int .mk-shape::after, .mk-fumble .mk-shape::before, .mk-fumble .mk-shape::after {
+.mk-int .mk-shape::before, .mk-int .mk-shape::after, .mk-fumble .mk-shape::before, .mk-fumble .mk-shape::after,
+.mk-muff .mk-shape::before, .mk-muff .mk-shape::after {
   content: ""; position: absolute; left: 6px; top: -1px; width: 3px; height: 17px; background: var(--bad); transform: rotate(45deg);
 }
-.mk-int .mk-shape::after, .mk-fumble .mk-shape::after { transform: rotate(-45deg); }
+.mk-int .mk-shape::after, .mk-fumble .mk-shape::after, .mk-muff .mk-shape::after { transform: rotate(-45deg); }
+/* the story's other events */
+.mk-fourth-go .mk-shape { width: 12px; height: 12px; background: var(--ta); }
+.mk-two-pt .mk-shape { width: 13px; height: 13px; border-radius: 50%; box-shadow: inset 0 0 0 3px var(--ta); }
+.mk-xp-miss .mk-shape { width: 11px; height: 10px; clip-path: polygon(50% 0, 100% 100%, 0 100%); background: var(--warn); }
+.mk-punt-block .mk-shape { width: 11px; height: 11px; transform: rotate(45deg); box-shadow: inset 0 0 0 3px var(--warn); }
+.mk-punt .mk-shape { width: 15px; height: 8px; border-radius: 8px 8px 0 0; box-shadow: inset 0 0 0 2px var(--ta); } /* the kick's arc */
+.mk-sack .mk-shape { width: 10px; height: 10px; transform: rotate(45deg); background: var(--ta); }
+.mk-penalty .mk-shape { width: 12px; height: 11px; background: var(--gain); clip-path: polygon(0 0, 100% 0, 75% 50%, 100% 100%, 0 100%); } /* a flag */
+.mk-injury .mk-shape::before, .mk-injury .mk-shape::after { content: ""; position: absolute; background: var(--warn); }
+.mk-injury .mk-shape::before { left: 5px; top: 1px; width: 5px; height: 13px; }
+.mk-injury .mk-shape::after { left: 1px; top: 5px; width: 13px; height: 5px; }
 .mk-downs .mk-shape { box-shadow: inset 0 0 0 3px var(--warn); width: 13px; height: 13px; }
 .mk-swing .mk-shape { width: 5px; height: 16px; background: var(--ta); border-radius: 1px; }
 .mk-clip .mk-shape { width: 16px; height: 16px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--tx2); }
@@ -462,6 +542,7 @@ img { display: block; }
 .kp > .mk { margin-top: -4px; }
 .kp-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 .kp-team { align-self: center; padding: 3px 5px 2px; font: 700 12px/1 var(--disp); letter-spacing: .1em; color: var(--on-ta); background: var(--ta); border-radius: 2px; }
+.kp-team.has-fill { color: var(--on-fill); background: var(--fill); box-shadow: inset 0 -2px 0 var(--fill2), inset 0 0 0 1px var(--tile-edge); }
 .kp-kind { font: 700 15px/1.1 var(--disp); letter-spacing: .1em; text-transform: uppercase; color: var(--tx); }
 .kp-int .kp-kind, .kp-fumble .kp-kind { color: var(--bad); }
 .kp-when { font: 500 13px/1 var(--disp); letter-spacing: .1em; color: var(--tx3); }
@@ -473,6 +554,59 @@ img { display: block; }
 .kp.is-sel .kp-text { -webkit-line-clamp: unset; line-clamp: none; color: var(--tx); }
 .kp-badges { margin-top: 8px; display: flex; gap: 8px; }
 .kp-badges:empty { display: none; }
+.kp-detail { margin-top: 5px; font: 500 14px/1.25 var(--disp); letter-spacing: .06em; color: var(--tx2); }
+.kp-injury .kp-kind { color: var(--warn); }
+/* a quarter divider inside the list: the label, a rule, the score at the break */
+.kp-rule {
+  display: flex; align-items: center; gap: 10px; padding: 16px 0 6px;
+  font: 700 12px/1 var(--disp); letter-spacing: .18em; text-transform: uppercase; color: var(--tx2);
+}
+.kp-rule::after { content: ""; order: 1; flex: 1; height: 1px; background: var(--line2); }
+.kp-rule-score { order: 2; color: var(--tx); letter-spacing: .08em; }
+.kp-rule.is-minor { color: var(--tx3); }
+.kp-rule.is-minor::after { background: var(--line); }
+.kp-rule:first-child { padding-top: 6px; }
+
+/* Story tab: the chart, its rail and the chips pin under the score bar; the list scrolls beneath them */
+.tabpane.is-story { padding-top: 0; }
+.story-pin {
+  position: sticky; top: calc(env(safe-area-inset-top, 0px) + var(--head-h, 118px)); z-index: 10;
+  margin-inline: calc(-1 * var(--gl)) calc(-1 * var(--gr)); padding: 12px var(--gr) 10px var(--gl);
+  background: var(--bg); border-bottom: 1px solid var(--line2);
+}
+.story-pin .wpchart-wrap { margin-top: 0; }
+.story-pin > .empty { padding: 8px 0; }
+/* the readout keeps a fixed two lines, so picking a play never makes the pinned block (and the list) jump */
+.story-pin .wp-readout {
+  height: calc(2 * 1.35em); overflow: hidden;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+}
+/* a short screen, decided once per load (.is-short on .app; not a height media query, which iOS flips mid-scroll
+   as its toolbar collapses) */
+.is-short .story-pin { padding-top: 8px; padding-bottom: 8px; }
+.is-short .story-pin .wp-rail { height: 32px; }
+.is-short .story-pin .wp-rail .mk { top: 0; }
+.is-short .story-pin .wp-readout { height: 1.35em; -webkit-line-clamp: 1; line-clamp: 1; }
+/* filter chips: one row that scrolls sideways on a phone, wrapping where there's room */
+.chips {
+  display: flex; gap: 6px; margin: 8px calc(-1 * var(--gr)) 0 calc(-1 * var(--gl)); padding: 0 var(--gr) 0 var(--gl);
+  overflow-x: auto; scrollbar-width: none;
+}
+.chips::-webkit-scrollbar { display: none; }
+@media (min-width: 540px) { .chips { flex-wrap: wrap; overflow: visible; } }
+.chip {
+  flex: none; display: inline-flex; align-items: center; gap: 3px; height: 36px; padding: 0 11px 0 4px;
+  font: 700 13px/1 var(--disp); letter-spacing: .1em; text-transform: uppercase; white-space: nowrap;
+  color: var(--tx3); border: 1px dashed var(--line2); border-radius: 18px;
+}
+.chip:hover { color: var(--tx2); }
+/* on: filled and solid-edged (readable without colour); off: dashed and dim */
+.chip.is-on { color: var(--tx); background: var(--s2); border: 1px solid var(--tx3); }
+.chip-n { margin-left: 3px; font-weight: 500; color: var(--tx3); }
+.chip.is-on .chip-n { color: var(--tx2); }
+.chips .chip .mk { width: 24px; height: 24px; --ta: var(--tx3); }
+.chips .chip.is-on .mk { --ta: var(--tx); }
+.chips .mk-shape { scale: .75; }
 
 /* a highlight clip: ESPN's thumbnail, a play glyph, the length; it opens ESPN's own player */
 .clip { position: relative; display: block; width: 96px; height: 54px; border-radius: 3px; overflow: hidden; background: var(--s2); flex: none; }
@@ -583,6 +717,7 @@ img { display: block; }
 /* players ------------------------------------------------------------------- */
 .pl-team + .pl-team { margin-top: 30px; }
 .pl-team-name { display: inline-block; margin: 0 0 14px; padding: 5px 10px 4px; background: var(--ta); color: var(--on-ta); font: 700 18px/1 var(--disp); letter-spacing: .08em; text-transform: uppercase; }
+.pl-team.has-fill .pl-team-name { padding-bottom: 7px; background: var(--fill); color: var(--on-fill); box-shadow: inset 0 -3px 0 var(--fill2), inset 0 0 0 1px var(--tile-edge); }
 .more { display: block; width: 100%; margin-top: 8px; padding: 13px; text-align: center; font: 700 14px/1 var(--disp); letter-spacing: .14em; text-transform: uppercase; color: var(--tx2); box-shadow: inset 0 0 0 1px var(--line2); }
 .topplays-title { margin: 18px 0 6px; font: 700 13px/1 var(--disp); letter-spacing: .18em; text-transform: uppercase; color: var(--tx2); }
 .pl-table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
@@ -595,6 +730,40 @@ img { display: block; }
 .pl-table td { padding: 9px 0 8px 9px; white-space: nowrap; text-align: right; font: 700 18px/1 var(--disp); border-bottom: 1px solid var(--line); }
 .pl-table th:first-child, .pl-table td:first-child, .pl-name { text-align: left; padding-left: 0; }
 .pl-table td.pl-name { font-size: 17px; white-space: normal; width: 34%; }
+/* the position compare: group buttons, then one head-to-head per pair of players */
+.pos-tabs { display: flex; gap: 6px; margin-bottom: 14px; overflow-x: auto; scrollbar-width: none; }
+.pos-tabs::-webkit-scrollbar { display: none; }
+.pos-tab {
+  flex: none; height: 36px; padding: 0 13px; border: 1px dashed var(--line2); border-radius: 18px;
+  font: 700 13px/1 var(--disp); letter-spacing: .1em; text-transform: uppercase; color: var(--tx3); white-space: nowrap;
+}
+.pos-tab.is-on { color: var(--tx); background: var(--s2); border: 1px solid var(--tx3); }
+.pos-pair + .pos-pair { margin-top: 22px; }
+.pos-pair .cmp-team { text-transform: none; letter-spacing: .04em; }
+.pos-note { margin: 0 0 14px; }
+
+/* standouts: broadcast lower-thirds, a team-colour edge, the score big on the right */
+.so-block + .so-block { margin-top: 8px; }
+.so-block .sub-title { margin-top: 0; }
+.so-block.is-rough .sub-title { margin-top: 18px; }
+.so-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.so-card {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; column-gap: 10px; row-gap: 6px;
+  padding: 11px 12px 12px; background: var(--s1); border-left: 4px solid var(--ta);
+}
+.so-team { padding: 4px 6px 3px; background: var(--ta); color: var(--on-ta); font: 700 13px/1 var(--disp); letter-spacing: .08em; }
+.so-name { min-width: 0; font: 700 21px/1 var(--disp); letter-spacing: .03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.so-pos { grid-column: 3; font: 500 13px/1 var(--disp); letter-spacing: .1em; text-transform: uppercase; color: var(--tx2); }
+.so-score { grid-column: 4; grid-row: 1; font: 700 26px/1 var(--disp); letter-spacing: .02em; }
+.so-card.is-good .so-score { color: var(--live); }
+.so-card.is-rough .so-score { color: var(--bad); }
+.so-why { grid-column: 1 / -1; margin: 0; font-size: 14px; line-height: 1.35; color: var(--tx2); }
+/* in the team's fill: the stripe in its other colour, the abbreviation outlined, and the score (green good, red
+   rough) on a chip of page so its colour keeps the contrast it has everywhere else */
+.so-card.has-fill { background: var(--fill); color: var(--on-fill); border-left-color: var(--fill2); box-shadow: inset 0 0 0 1px var(--tile-edge); }
+.so-card.has-fill .so-team { background: none; color: var(--on-fill); box-shadow: inset 0 0 0 1.5px var(--on-fill); }
+.so-card.has-fill .so-pos, .so-card.has-fill .so-why { color: var(--on-fill); }
+.so-card.has-fill .so-score { padding: 5px 7px 3px; background: var(--bg); border-radius: 2px; }
 .adv .topplays .play { border-left-color: var(--tx3); }
 .adv .topplays .play-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
 

@@ -3,6 +3,7 @@
 Reads nflverse play-by-play (CC-BY 4.0) from its GitHub release, writes small JSON the static site serves:
   public/data/ep_table.json        EP by down x distance bucket x yards-to-go, plus its calibration
   public/data/games/<espn id>.json  per-game EPA / success / CPOE / pass rate over expected / top plays
+  public/data/baselines.json        league averages (this season, the last 3 seasons) and the standouts' weights
 Stdlib only, so a GitHub Action can run it with no installs.
 
 Usage: python -X utf8 -I scripts/nflverse_build.py [--season 2026] [--ep-seasons 2022,2023,2024,2025] [--out public/data]
@@ -53,6 +54,13 @@ def read_pbp(season: int, max_age_h: float) -> list[dict]:
         "air_yards", "yards_after_catch", "td_team", "ep", "epa", "wpa", "touchdown", "safety", "pass", "rush",
         "success", "passer", "passer_id", "complete_pass", "incomplete_pass", "interception", "passing_yards",
         "cpoe", "xpass", "qb_epa", "season", "two_point_attempt",
+        # league averages (baselines.json)
+        "fumble_lost", "sack", "qb_scramble", "qb_kneel", "qb_spike", "third_down_converted", "third_down_failed",
+        "fixed_drive", "fixed_drive_result", "drive_inside20", "first_down", "penalty_team", "penalty_yards",
+        "rusher_player_id", "receiver_player_id", "pass_attempt", "field_goal_result", "kick_distance",
+        "extra_point_result", "punt_attempt", "tackled_for_loss", "pass_defense_1_player_id",
+        "quarter_seconds_remaining", "posteam_score", "posteam_score_post", "receiving_yards", "rushing_yards",
+        "pass_touchdown", "rush_touchdown",
     }
     rows = []
     with gzip.open(path, "rt", encoding="utf-8", newline="") as f:
@@ -279,6 +287,303 @@ def top_plays(plays: list[dict], home: str, key: str, n: int = 5) -> list[dict]:
     return out
 
 
+# ---------- league averages (baselines.json) ----------
+# What the page compares a game against: the league average this season so far, and over the three completed seasons
+# before it. No all-time window: the passing era and rule changes (the 2024 kickoff) make old numbers a different sport.
+# Regular-season games only. Rates are pooled (sum over sum) across the window; totals are means per team-game.
+# The definitions match the page's own live numbers (src/stats/live.ts, src/stats/players.ts), not nflverse's.
+
+KICKOFF_RULE_SEASON = 2024
+# Stats the 2024 kickoff rule moved: left out of any window that reaches back before it, with the reason.
+KICKOFF_AFFECTED = {
+    "avgStart": "Drive starts moved with the 2024 kickoff rule; this window includes older seasons, so it has no average for them.",
+}
+# A player-game counts toward its group's average only with this much volume (the page shows the text).
+QUALIFIERS = {
+    "qb": {"min": 14, "unit": "dropbacks", "text": "quarterbacks with 14+ dropbacks in a game"},
+    "rb": {"min": 8, "unit": "carries", "text": "runners with 8+ designed carries in a game"},
+    "wr": {"min": 4, "unit": "targets", "text": "receivers and backs with 4+ targets in a game"},
+    "k": {"min": 1, "unit": "kicks", "text": "every field goal, extra point and punt"},
+}
+FG_BUCKETS = [0, 30, 40, 50, 55]  # lower bounds of the field-goal distance bands for make rates
+
+
+def col(p: dict, k: str) -> str:
+    return p.get(k, "")
+
+
+def is1(p: dict, k: str) -> bool:
+    return col(p, k) == "1"
+
+
+def counted(p: dict) -> bool:
+    """A snap the page counts for EPA: a pass or run (a flagged one too), not a kneel, spike or two-point try."""
+    return ((is1(p, "pass") or is1(p, "rush")) and inum(col(p, "down")) is not None and fnum(col(p, "epa")) is not None
+            and not is1(p, "two_point_attempt") and not is1(p, "qb_kneel") and not is1(p, "qb_spike"))
+
+
+def stood(p: dict) -> bool:
+    """A counted snap that a flag didn't wipe out: what success rate, yards and explosives count."""
+    return counted(p) and col(p, "play_type") != "no_play"
+
+
+def lost_ball(p: dict) -> bool:
+    return is1(p, "interception") or is1(p, "fumble_lost")
+
+
+def rule_success(p: dict) -> bool:
+    """The page's 40/60/100 rule (src/espn/model.ts isSuccess), not nflverse's EPA > 0."""
+    if lost_ball(p):
+        return False
+    if is1(p, "touchdown") and col(p, "td_team") == col(p, "posteam"):
+        return True
+    down = inum(col(p, "down")) or 1
+    need = 0.4 if down == 1 else 0.6 if down == 2 else 1.0
+    return (fnum(col(p, "yards_gained")) or 0) >= need * (inum(col(p, "ydstogo")) or 0)
+
+
+def yds(p: dict) -> float:
+    return fnum(col(p, "yards_gained")) or 0.0
+
+
+class Pool:
+    """Rates as (numerator, denominator) pairs and totals as per-game lists, summed across a window."""
+
+    def __init__(self):
+        self.num = defaultdict(float)
+        self.den = defaultdict(float)
+        self.tot = defaultdict(list)
+
+    def rate(self, k: str, num: float, den: float):
+        self.num[k] += num
+        self.den[k] += den
+
+    def total(self, k: str, v: float):
+        self.tot[k].append(v)
+
+    def out(self, digits: int = 4) -> dict:
+        rates = {k: round(self.num[k] / self.den[k], digits) for k in self.num if self.den[k] > 0}
+        totals = {k: round(sum(v) / len(v), 2) for k, v in self.tot.items() if v}
+        return {"rates": rates, "totals": totals}
+
+
+def team_game(pool: Pool, game: list[dict], team: str):
+    mine = [p for p in game if col(p, "posteam") == team]
+    snaps = [p for p in mine if counted(p)]
+    real = [p for p in snaps if stood(p)]
+    passes = [p for p in real if is1(p, "pass")]
+    pool.rate("successRate", sum(1 for p in real if rule_success(p)), len(real))
+    pool.rate("epaPerPlay", sum(fnum(col(p, "epa")) for p in snaps), len(snaps))
+    pool.rate("yardsPerPlay", sum(yds(p) for p in real), len(real))
+    conv = sum(1 for p in mine if is1(p, "third_down_converted"))
+    fail = sum(1 for p in mine if is1(p, "third_down_failed"))
+    pool.rate("thirdDownRate", conv, conv + fail)
+    early = [p for p in real if inum(col(p, "down")) in (1, 2)
+             and not ((inum(col(p, "qtr")) or 1) in (2, 4, 5, 6) and (inum(col(p, "quarter_seconds_remaining")) or 900) <= 120)]
+    pool.rate("earlyDownPassRate", sum(1 for p in early if is1(p, "pass")), len(early))
+    thirds = [p for p in real if inum(col(p, "down")) == 3]
+    pool.rate("avgThirdDistance", sum(inum(col(p, "ydstogo")) or 0 for p in thirds), len(thirds))
+
+    drives = defaultdict(list)
+    for p in mine:
+        if col(p, "fixed_drive") not in ("", "NA"):
+            drives[col(p, "fixed_drive")].append(p)
+    pts_sum, n_drives, rz_trips, rz_tds, starts = 0.0, 0, 0, 0, []
+    for rows in drives.values():
+        plays = [p for p in rows if counted(p)]
+        if not plays:
+            continue
+        pts = sum(max(0.0, (fnum(col(p, "posteam_score_post")) or 0) - (fnum(col(p, "posteam_score")) or 0)) for p in rows)
+        result = col(rows[-1], "fixed_drive_result")
+        starts.append(100 - (inum(col(plays[0], "yardline_100")) or 75))
+        if any(is1(p, "drive_inside20") for p in rows):
+            rz_trips += 1
+            rz_tds += result == "Touchdown"
+        # The page leaves out a kneel-out or two-snap end of half that scored nothing (src/stats/live.ts).
+        if result == "End of half" and len(plays) <= 2 and pts == 0:
+            continue
+        pts_sum += pts
+        n_drives += 1
+    pool.rate("pointsPerDrive", pts_sum, n_drives)
+    pool.rate("redZoneTdRate", rz_tds, rz_trips)
+    pool.rate("avgStart", sum(starts), len(starts))
+
+    pool.total("totalYards", sum(yds(p) for p in real))
+    pool.total("netPassingYards", sum(yds(p) for p in passes if col(p, "qb_scramble") != "1"))
+    pool.total("rushingYards", sum(yds(p) for p in real if is1(p, "rush") or is1(p, "qb_scramble")))
+    pool.total("firstDowns", sum(1 for p in mine if is1(p, "first_down")))
+    pool.total("turnovers", sum(1 for p in mine if lost_ball(p) and col(p, "play_type") in ("pass", "run")))
+    pool.total("sacksTaken", sum(1 for p in passes if is1(p, "sack")))
+    pool.total("penaltyYards", sum(fnum(col(p, "penalty_yards")) or 0 for p in game if col(p, "penalty_team") == team))
+    pool.total("explosives", sum(1 for p in real if not lost_ball(p)
+                                 and ((is1(p, "rush") and yds(p) >= 10) or (is1(p, "pass") and yds(p) >= 20))))
+
+
+def player_games(pools: dict, game: list[dict]):
+    qb, rb, wr = defaultdict(list), defaultdict(list), defaultdict(list)
+    for p in game:
+        if not counted(p):
+            continue
+        if is1(p, "qb_dropback") and col(p, "passer_id") not in ("", "NA"):
+            qb[col(p, "passer_id")].append(p)
+        if is1(p, "rush") and col(p, "rusher_player_id") not in ("", "NA"):
+            rb[col(p, "rusher_player_id")].append(p)
+        if is1(p, "pass_attempt") and not is1(p, "sack") and col(p, "receiver_player_id") not in ("", "NA"):
+            wr[col(p, "receiver_player_id")].append(p)
+    for rows in qb.values():
+        real = [p for p in rows if stood(p)]
+        if len(real) < QUALIFIERS["qb"]["min"]:
+            continue
+        att = [p for p in real if is1(p, "pass_attempt") and not is1(p, "sack") and not is1(p, "qb_scramble")]
+        pl = pools["qb"]
+        pl.rate("compPct", sum(1 for p in att if is1(p, "complete_pass")), len(att))
+        pl.rate("yardsPerAttempt", sum(fnum(col(p, "passing_yards")) or 0 for p in att), len(att))
+        pl.rate("sackRate", sum(1 for p in real if is1(p, "sack")), len(real))
+        pl.rate("epaPerDropback", sum(fnum(col(p, "epa")) for p in rows), len(rows))
+        pl.rate("successRate", sum(1 for p in real if rule_success(p)), len(real))
+        pl.total("passYards", sum(fnum(col(p, "passing_yards")) or 0 for p in att))
+        pl.total("passTd", sum(1 for p in att if is1(p, "pass_touchdown")))
+        pl.total("interceptions", sum(1 for p in att if is1(p, "interception")))
+    for rows in rb.values():
+        real = [p for p in rows if stood(p)]
+        if len(real) < QUALIFIERS["rb"]["min"]:
+            continue
+        pl = pools["rb"]
+        pl.rate("yardsPerCarry", sum(yds(p) for p in real), len(real))
+        pl.rate("epaPerCarry", sum(fnum(col(p, "epa")) for p in rows), len(rows))
+        pl.rate("successRate", sum(1 for p in real if rule_success(p)), len(real))
+        pl.total("rushYards", sum(yds(p) for p in real))
+        pl.total("rushTd", sum(1 for p in real if is1(p, "rush_touchdown")))
+    for rows in wr.values():
+        real = [p for p in rows if stood(p)]
+        if len(real) < QUALIFIERS["wr"]["min"]:
+            continue
+        pl = pools["wr"]
+        catches = [p for p in real if is1(p, "complete_pass")]
+        pl.rate("catchRate", len(catches), len(real))
+        pl.rate("yardsPerTarget", sum(yds(p) for p in catches), len(real))
+        pl.rate("epaPerTarget", sum(fnum(col(p, "epa")) for p in rows), len(rows))
+        pl.total("recYards", sum(yds(p) for p in catches))
+        pl.total("recTd", sum(1 for p in catches if is1(p, "pass_touchdown")))
+    kp = pools["k"]
+    for p in game:
+        fg = col(p, "field_goal_result")
+        if fg in ("made", "missed", "blocked"):
+            kp.rate("fgPct", fg == "made", 1)
+        xp = col(p, "extra_point_result")
+        if xp in ("good", "failed", "blocked", "aborted"):
+            kp.rate("xpPct", xp == "good", 1)
+        if is1(p, "punt_attempt") and fnum(col(p, "kick_distance")) is not None:
+            kp.rate("puntAvg", fnum(col(p, "kick_distance")), 1)
+
+
+def impact_weights(plays: list[dict]) -> dict:
+    """What a defensive play is worth, in expected points the offense lost on it (the mean over the window), and how
+    often kicks are made by distance: the page's standouts score credits defenders and kickers with these."""
+    def lost(pred) -> float | None:
+        v = [-fnum(col(p, "epa")) for p in plays if fnum(col(p, "epa")) is not None and pred(p)]
+        return round(sum(v) / len(v), 3) if v else None
+
+    fg = defaultdict(lambda: [0, 0])
+    xp = [0, 0]
+    for p in plays:
+        r = col(p, "field_goal_result")
+        d = inum(col(p, "kick_distance"))
+        if r in ("made", "missed", "blocked") and d is not None:
+            b = max(lo for lo in FG_BUCKETS if d >= lo)
+            fg[b][0] += r == "made"
+            fg[b][1] += 1
+        x = col(p, "extra_point_result")
+        if x in ("good", "failed", "blocked", "aborted"):
+            xp[0] += x == "good"
+            xp[1] += 1
+    return {
+        "sack": lost(lambda p: is1(p, "sack") and stood(p)),
+        "interception": lost(lambda p: is1(p, "interception")),
+        "fumbleLost": lost(lambda p: is1(p, "fumble_lost") and counted(p)),
+        "tackleForLoss": lost(lambda p: is1(p, "tackled_for_loss") and not is1(p, "sack") and stood(p)),
+        "passDefended": lost(lambda p: is1(p, "incomplete_pass") and col(p, "pass_defense_1_player_id") not in ("", "NA")),
+        "fgMake": [[b, round(fg[b][0] / fg[b][1], 3)] for b in FG_BUCKETS if fg[b][1]],
+        "xpMake": round(xp[0] / xp[1], 3) if xp[1] else None,
+    }
+
+
+Schedule = dict[tuple[int, int], set[str]]  # (season, week) -> the regular-season game ids scheduled that week
+
+
+def read_schedule(path: str) -> Schedule:
+    out: Schedule = defaultdict(set)
+    with open(path, encoding="utf-8", newline="") as f:
+        for g in csv.DictReader(f):
+            if g.get("game_type") == "REG" and inum(g.get("season", "")) and inum(g.get("week", "")):
+                out[(int(g["season"]), int(g["week"]))].add(g["game_id"])
+    return out
+
+
+def final_weeks(plays: list[dict], schedule: Schedule | None) -> int:
+    """Weeks whose every scheduled game is in the play-by-play: a Thursday game alone doesn't make week 4 count.
+    Without a schedule (the test hook), every week with a game counts."""
+    played = {col(p, "game_id") for p in plays}
+    pairs = {(inum(col(p, "season")), inum(col(p, "week"))) for p in plays if inum(col(p, "week")) is not None}
+    if schedule is not None:
+        pairs = {k for k in pairs if schedule.get(k) and schedule[k] <= played}
+    return len({w for _, w in pairs})
+
+
+def baseline_window(label: str, seasons: list[int], pbp: dict[int, list[dict]], schedule: Schedule | None) -> dict:
+    plays = [p for s in seasons for p in pbp.get(s, []) if col(p, "season_type") == "REG"]
+    games = defaultdict(list)
+    for p in plays:
+        games[col(p, "game_id")].append(p)
+    team = Pool()
+    players = {k: Pool() for k in QUALIFIERS}
+    for rows in games.values():
+        for t in {col(rows[0], "home_team"), col(rows[0], "away_team")}:
+            team_game(team, rows, t)
+        player_games(players, rows)
+    excluded = {k: why for k, why in KICKOFF_AFFECTED.items() if seasons and min(seasons) < KICKOFF_RULE_SEASON}
+    team_out = team.out()
+    for k in excluded:
+        team_out["rates"].pop(k, None)
+        team_out["totals"].pop(k, None)
+    return {
+        "label": label,
+        "seasons": seasons,
+        "weeks": final_weeks(plays, schedule),
+        "games": len(games),
+        "team": team_out,
+        "players": {k: v.out() for k, v in players.items()},
+        "excluded": excluded,
+    }
+
+
+def build_baselines(pbp: dict[int, list[dict]], season: int, built: str, schedule: Schedule | None) -> dict:
+    last3 = [season - 3, season - 2, season - 1]
+    return {
+        "version": 1,
+        "built": built,
+        "season": season,
+        "windows": {
+            "season": baseline_window("This season", [season], pbp, schedule),
+            "last3": baseline_window("Last 3 seasons", last3, pbp, schedule),
+        },
+        "qualifiers": {k: v["text"] for k, v in QUALIFIERS.items()},
+        # From the three completed seasons: steadier than a few weeks of this one.
+        "impact": impact_weights([p for s in last3 for p in pbp.get(s, []) if col(p, "season_type") == "REG"]),
+    }
+
+
+def write_baselines(pbp: dict[int, list[dict]], season: int, out: str, built: str, schedule: Schedule | None) -> dict:
+    doc = build_baselines(pbp, season, built, schedule)
+    os.makedirs(out, exist_ok=True)
+    with open(os.path.join(out, "baselines.json"), "w", encoding="utf-8") as f:
+        json.dump(doc, f, separators=(",", ":"))
+    w = doc["windows"]
+    print(f"  baselines: this season {w['season']['games']} games over {w['season']['weeks']} weeks; "
+          f"last 3 seasons {w['last3']['games']} games", file=sys.stderr)
+    return doc
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--season", type=int, default=2026)
@@ -286,10 +591,21 @@ def main() -> int:
     ap.add_argument("--ep-seasons", default="2022,2023,2024,2025")
     ap.add_argument("--out", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "public", "data"))
     ap.add_argument("--max-age-h", type=float, default=6.0, help="re-download cached files older than this")
+    ap.add_argument("--baselines-from", help="test hook: build only baselines.json from this play-by-play CSV (no downloads)")
+    ap.add_argument("--games-from", help="test hook: the schedule CSV (nfldata games.csv columns) for --baselines-from")
     a = ap.parse_args()
 
+    if a.baselines_from:
+        fixture = defaultdict(list)
+        with open(a.baselines_from, encoding="utf-8", newline="") as f:
+            for row in csv.DictReader(f):
+                fixture[int(row["season"])].append(row)
+        write_baselines(fixture, a.season, a.out, "fixture", read_schedule(a.games_from) if a.games_from else None)
+        return 0
+
     ep_seasons = [int(s) for s in a.ep_seasons.split(",") if s]
-    seasons = sorted(set(ep_seasons) | {a.season})
+    # This season, the EP table's seasons, and the three completed seasons the league averages use.
+    seasons = sorted(set(ep_seasons) | {a.season} | {a.season - k for k in (1, 2, 3)})
     pbp = {s: read_pbp(s, a.max_age_h) for s in seasons}
 
     print("building EP table", file=sys.stderr)
@@ -367,6 +683,7 @@ def main() -> int:
     }
     with open(os.path.join(a.out, "ep_table.json"), "w", encoding="utf-8") as f:
         json.dump(ep_doc, f, separators=(",", ":"))
+    write_baselines(pbp, a.season, a.out, built, read_schedule(games_path))
     print(json.dumps({"games_written": written, "calibration": calibration}), file=sys.stderr)
     return 0
 

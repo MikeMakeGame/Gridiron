@@ -2,8 +2,8 @@
 import { getScoreboard, SNAPSHOT, type WeekRef } from '../espn/api';
 import { boardInterval } from '../espn/cadence';
 import type { EspnEvent, EspnScoreboard } from '../espn/types';
-import { clockLabel, teamInfo, type TeamInfo } from '../espn/model';
-import { apart, kickoffText, smallLogo, teamVars } from '../format';
+import { clockLabel, homeBeside, teamInfo, type TeamInfo } from '../espn/model';
+import { fillClass, kickoffText, smallLogo, teamVars } from '../format';
 import { usePoll } from '../hooks/usePoll';
 import { Fresh } from './Fresh';
 import { Logo } from './Logo';
@@ -147,7 +147,7 @@ function GameCard({ e }: { e: EspnEvent }) {
   const c = e.competitions[0];
   const st = e.status.type.state;
   const away = teamInfo(c.competitors.find((x) => x.homeAway === 'away')!);
-  const home = apart(away, teamInfo(c.competitors.find((x) => x.homeAway === 'home')!));
+  const home = homeBeside(away, teamInfo(c.competitors.find((x) => x.homeAway === 'home')!));
   const sit = c.situation;
   const wp = sit?.lastPlay?.probability?.homeWinPercentage;
   const close = st === 'in' && (e.status.period ?? 0) >= 4 && Math.abs(home.score - away.score) <= 8;
@@ -201,12 +201,13 @@ function GameCard({ e }: { e: EspnEvent }) {
 function TeamRow({ t, showScore, poss, winner }: { t: TeamInfo; showScore: boolean; poss: boolean; winner: string }) {
   const res = winner ? (winner === t.id ? ' is-winner' : ' is-loser') : '';
   return (
-    <div class={`sb-team${res}`} style={teamVars(t)}>
-      {t.logo && <Logo src={smallLogo(t.logo)} abbr={t.abbr} size={28} />}
+    <div class={`sb-team${res}${fillClass(t)}`} style={teamVars(t)}>
+      {t.logo && <Logo src={smallLogo(t.logo)} abbr={t.abbr} size={28} on={t.fill?.logo} />}
       <span class="abbr">{t.abbr}</span>
       {poss && <span class="poss" aria-label="has the ball" />}
       <span class="rec">{t.record}</span>
       {showScore && <span class="score">{t.score}</span>}
+      {res === ' is-winner' && <span class="sr">winner</span>}
     </div>
   );
 }

@@ -83,6 +83,33 @@ function summary(plays: EspnPlay[], offense = HOME): EspnSummary {
 }
 
 describe('buildGame play classification', () => {
+  it("gives a flagged scoring play only its own score change, not points an unflagged row before it held back", () => {
+    // An unflagged row moves HOM to 3; the next row (a flagged touchdown) reads 10, so the 3 is never confirmed on
+    // its own row. The touchdown is still worth 7 to the play, and the score still ends 10.
+    const g = buildGame(
+      summary([
+        play({ type: 'Rush', text: 'R.Back up the middle to AWY 20 for 5 yards (L.Backer).', off: HOME, down: 1, dist: 10, ytg: 25, endDown: 2, endDist: 5, endYtg: 20, yards: 5, home: 3 }),
+        play({ type: 'Passing Touchdown', text: 'Q.Back pass short left to W.Out for 20 yards, TOUCHDOWN.', off: HOME, down: 2, dist: 5, ytg: 20, yards: 20, home: 10, scoring: true }),
+      ]),
+      { ep: EP },
+    );
+    expect(g.plays[1].offPts).toBe(7);
+    expect(g.plays[1].defPts).toBe(0);
+    expect(g.plays[1].homeScore).toBe(10);
+  });
+
+  it('falls back to the scores held so far when the row before read higher (a one-row glitch)', () => {
+    const g = buildGame(
+      summary([
+        play({ type: 'Rush', text: 'R.Back up the middle to AWY 20 for 5 yards (L.Backer).', off: HOME, down: 1, dist: 10, ytg: 25, yards: 5 }),
+        play({ type: 'Rush', text: 'R.Back up the middle to AWY 15 for 5 yards (L.Backer).', off: HOME, down: 2, dist: 5, ytg: 20, yards: 5, away: 20 }),
+        play({ type: 'Rushing Touchdown', text: 'R.Back left end for 15 yards, TOUCHDOWN.', off: HOME, down: 1, dist: 10, ytg: 15, yards: 15, home: 7, scoring: true }),
+      ]),
+      { ep: EP },
+    );
+    expect(g.plays[2].offPts).toBe(7);
+  });
+
   it('leaves kneel-downs out of EPA and success, as nflverse does', () => {
     const g = buildGame(
       summary([play({ type: 'Rush', text: 'Q.Back kneels to HOM 40 for -1 yards.', off: HOME, down: 1, dist: 10, ytg: 60, endDown: 2, endDist: 11, endYtg: 61, yards: -1 })]),
@@ -178,14 +205,29 @@ describe('buildGame play classification', () => {
   it('ignores a score that dips for one row and comes back', () => {
     const g = buildGame(
       summary([
+        // The 7 points came earlier in the game; this row and the next both carry them.
+        play({ type: 'Kickoff', text: 'K.Icker kicks 65 yards from HOM 35 to AWY 0. Touchback.', off: HOME, down: 0, dist: 0, ytg: 65, endOff: HOME, endDown: 1, endDist: 10, endYtg: 75, home: 7 }),
         play({ type: 'Rush', text: 'R.Unner up the middle to HOM 30 for 5 yards.', off: HOME, down: 1, dist: 10, ytg: 75, endDown: 2, endDist: 5, endYtg: 70, yards: 5, home: 7 }),
         play({ type: 'Rush', text: 'R.Unner up the middle to HOM 32 for 2 yards.', off: HOME, down: 2, dist: 5, ytg: 70, endDown: 3, endDist: 3, endYtg: 68, yards: 2, home: 0 }),
         play({ type: 'Pass Reception', text: 'Q.Back pass short right to W.Out to HOM 38 for 6 yards.', off: HOME, down: 3, dist: 3, ytg: 68, endDown: 1, endDist: 10, endYtg: 62, yards: 6, home: 7 }),
       ]),
       { ep: EP },
     );
-    expect(g.plays.map((p) => p.homeScore)).toEqual([7, 7, 7]);
+    expect(g.plays.map((p) => p.homeScore)).toEqual([7, 7, 7, 7]);
     expect(g.plays.some((p) => p.scoring)).toBe(false);
     expect(g.plays.every((p) => p.epa == null || Math.abs(p.epa) < 3)).toBe(true);
+  });
+
+  it('ignores a score that jumps ahead for one row and drops back, so the real score after it still counts', () => {
+    const g = buildGame(
+      summary([
+        play({ type: 'Rush', text: 'R.Unner up the middle to HOM 30 for 5 yards.', off: HOME, down: 1, dist: 10, ytg: 75, endDown: 2, endDist: 5, endYtg: 70, yards: 5, away: 20 }),
+        play({ type: 'Rush', text: 'R.Unner up the middle to HOM 32 for 2 yards.', off: HOME, down: 2, dist: 5, ytg: 70, endDown: 3, endDist: 3, endYtg: 68, yards: 2 }),
+        play({ type: 'Passing Touchdown', text: 'Q.Back pass short right to W.Out for 32 yards, TOUCHDOWN.', off: HOME, down: 3, dist: 3, ytg: 32, endYtg: 0, yards: 32, home: 7, scoring: true }),
+      ]),
+      { ep: EP },
+    );
+    expect(g.plays.map((p) => p.awayScore)).toEqual([0, 0, 0]);
+    expect(g.plays.map((p) => p.homeScore)).toEqual([0, 0, 7]);
   });
 });

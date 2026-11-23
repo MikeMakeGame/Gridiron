@@ -1,8 +1,12 @@
-// Player box score, the three categories people read by default and the rest behind one tap.
+// Players: the position compare (QB vs QB first), then the box score, the three categories people read by default
+// and the rest behind one tap.
 import { useState } from 'preact/hooks';
 import type { Game } from '../espn/model';
+import type { BaselineId } from '../stats/baselines';
+import type { AvgCtx } from './TeamStats';
+import { PositionCompare } from './PositionCompare';
 import type { EspnBoxPlayerCategory } from '../espn/types';
-import { teamVars } from '../format';
+import { fillClass, teamVars } from '../format';
 
 const MAIN = ['passing', 'rushing', 'receiving'];
 const MORE = ['defensive', 'interceptions', 'fumbles', 'kicking', 'punting', 'kickReturns', 'puntReturns'];
@@ -19,20 +23,23 @@ const TITLE: Record<string, string> = {
   puntReturns: 'Punt returns',
 };
 
-export function Players({ g }: { g: Game }) {
+export function Players({ g, avg, onPick }: { g: Game; avg: AvgCtx; onPick: (id: BaselineId) => void }) {
   const [more, setMore] = useState(false);
   const teams = g.box?.players ?? [];
-  if (!teams.length) return <p class="empty">Box score appears after kickoff.</p>;
+  if (!teams.length && !g.plays.length) return <p class="empty">Box score appears after kickoff.</p>;
   // ESPN lists away first; keep the page's away-then-home order regardless.
   const ordered = [...teams].sort((a, b) => (a.team.id === g.away.id ? -1 : b.team.id === g.away.id ? 1 : 0));
   const cats = more ? [...MAIN, ...MORE] : MAIN;
   return (
     <div class="players">
-      {g.truncated && <p class="nums-note">Replay: this box score is the final one.</p>}
+      <h3 class="sub-title">Compare</h3>
+      <PositionCompare g={g} avg={avg} onPick={onPick} />
+      {ordered.length > 0 && <h3 class="sub-title">Box score</h3>}
+      {g.truncated && ordered.length > 0 && <p class="nums-note">Replay: this box score is the final one.</p>}
       {ordered.map((t) => {
         const info = t.team.id === g.home.id ? g.home : g.away;
         return (
-          <div class="pl-team" key={t.team.id} style={teamVars(info)}>
+          <div class={`pl-team${fillClass(info)}`} key={t.team.id} style={teamVars(info)}>
             <h3 class="pl-team-name">{info.name}</h3>
             {cats.map((name) => {
               const c = t.statistics.find((x) => x.name === name);
@@ -41,9 +48,11 @@ export function Players({ g }: { g: Game }) {
           </div>
         );
       })}
-      <button class="more" onClick={() => setMore(!more)}>
-        {more ? 'Fewer tables' : 'Defense, kicking, returns'}
-      </button>
+      {ordered.length > 0 && (
+        <button class="more" onClick={() => setMore(!more)}>
+          {more ? 'Fewer tables' : 'Defense, kicking, returns'}
+        </button>
+      )}
     </div>
   );
 }

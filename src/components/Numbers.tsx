@@ -5,7 +5,8 @@ import { getCalibration, type Calibration } from '../espn/api';
 import type { Game } from '../espn/model';
 import { teamNumbers, type TeamNumbers } from '../stats/live';
 import { num, pct, signed, yardText } from '../format';
-import { Compare, type Line } from './TeamStats';
+import { Compare, type AvgCtx, type Line } from './TeamStats';
+import { vsAverage, type StatKey } from '../stats/baselines';
 
 type Better = 'high' | 'low' | 'none';
 
@@ -21,7 +22,18 @@ interface Row {
 // Rows whose numbers aren't sizes: a bar would say more than the number does.
 const NO_BAR = new Set(['EPA / play', 'Early-down pass rate', 'Avg drive start', 'Avg 3rd-down distance', 'Turnovers (win % given away)']);
 
-export function Numbers({ g, epReady }: { g: Game; epReady: boolean }) {
+// The rows that have a league average.
+const STAT: Record<string, StatKey> = {
+  'Success rate': 'successRate',
+  'EPA / play': 'epaPerPlay',
+  'Explosive plays': 'explosives',
+  'Points / drive': 'pointsPerDrive',
+  'Early-down pass rate': 'earlyDownPassRate',
+  'Avg 3rd-down distance': 'avgThirdDistance',
+  'Avg drive start': 'avgStart',
+};
+
+export function Numbers({ g, epReady, avg }: { g: Game; epReady: boolean; avg?: AvgCtx }) {
   const [cal, setCal] = useState<Calibration | null>(null);
   useEffect(() => {
     if (epReady) getCalibration().then(setCal);
@@ -44,6 +56,7 @@ export function Numbers({ g, epReady }: { g: Game; epReady: boolean }) {
     },
     row('Avg drive start', A, H, (t) => t.avgStart, (x) => (x == null ? '–' : yardText(x)), 'high'),
   ];
+  const mark = (term: string, v: number | null) => (avg && STAT[term] ? vsAverage(avg.base, avg.id, 'team', STAT[term], v, avg.final) : null);
   const lines: Line[] = rows.map((r) => ({
     key: r.term,
     label: r.term,
@@ -54,6 +67,8 @@ export function Numbers({ g, epReady }: { g: Game; epReady: boolean }) {
     win: winner(r),
     bar: r.av != null && r.hv != null && !NO_BAR.has(r.term),
     est: r.term === 'EPA / play',
+    am: mark(r.term, r.av),
+    hm: mark(r.term, r.hv),
   }));
   return (
     <>

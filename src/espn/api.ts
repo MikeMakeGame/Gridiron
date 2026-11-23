@@ -2,6 +2,7 @@
 // snapshot mode (the offline build) reads JSON bundled next to the page.
 import type { EspnScoreboard, EspnSummary } from './types';
 import type { EpTable } from '../stats/ep';
+import { baselinesProblem, type Baselines } from '../stats/baselines';
 import { RetryAfterError, parseRetryAfter } from '../hooks/poller';
 
 const ESPN = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl';
@@ -167,6 +168,22 @@ export function getCalibration(): Promise<Calibration | null> {
     return c;
   });
   return calPromise;
+}
+
+// League averages (scripts/nflverse_build.py). Optional like the EP table: without it there are no average markers,
+// and the standouts score uses its built-in weights. A miss is retried on the next call.
+let basePromise: Promise<Baselines | null> | null = null;
+export function getBaselines(): Promise<Baselines | null> {
+  basePromise ??= getOptional<unknown>('./data/baselines.json').then((b) => {
+    const problem = b == null ? 'no file' : baselinesProblem(b);
+    if (problem) {
+      console.warn(`Gridiron: no league averages (data/baselines.json: ${problem}); stats show without average markers`);
+      basePromise = null;
+      return null;
+    }
+    return b as Baselines;
+  });
+  return basePromise;
 }
 
 export function getAdvanced(espnId: string): Promise<AdvancedGame | null> {

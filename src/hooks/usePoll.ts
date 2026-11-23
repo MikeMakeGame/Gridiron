@@ -95,6 +95,25 @@ export function useNow(ms = 1000): number {
   return now;
 }
 
+/** An element's border-box height, kept current (the sticky score bar's, so the Story tab's chart can pin under it).
+ *  The rendered box, fractions included, so the pin sits flush under it. */
+export function useHeight<E extends HTMLElement>(): [(el: E | null) => void, number] {
+  const [h, setH] = useState(0);
+  const obs = useRef<ResizeObserver | null>(null);
+  const ref = useCallback((el: E | null) => {
+    obs.current?.disconnect();
+    if (!el) return;
+    setH(el.getBoundingClientRect().height);
+    obs.current = new ResizeObserver(() => setH(el.getBoundingClientRect().height));
+    obs.current.observe(el);
+  }, []);
+  return [ref, h];
+}
+
+/** A short phone screen (700 px tall or less), decided once when the page loads. Not a live media query: on iOS the
+ *  toolbar collapsing mid-scroll changes the height, which would flip the pinned chart's size under the reader. */
+export const SHORT_SCREEN: boolean = typeof window !== 'undefined' && window.innerHeight > 0 && window.innerHeight <= 700;
+
 /** Element width, kept current, for charts drawn in real pixels. */
 export function useWidth<E extends HTMLElement>(): [(el: E | null) => void, number] {
   const [w, setW] = useState(0);

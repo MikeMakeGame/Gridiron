@@ -1,7 +1,7 @@
 // Turns ESPN's summary JSON into the one Game shape every component reads.
 import type { EspnCompetitor, EspnDrive, EspnPlay, EspnSituation, EspnSummary, EspnTeam } from './types';
 import { estimateEpa, type EpTable } from '../stats/ep';
-import { apart } from '../format';
+import { pairHome, teamFill, type LineLift, type TeamFill } from './colors';
 
 export type PlayKind = 'pass' | 'rush' | 'kick' | 'punt' | 'fg' | 'xp' | 'penalty' | 'other';
 
@@ -12,6 +12,10 @@ export interface TeamInfo {
   short: string;
   color: string; // '#rrggbb'
   color2: string;
+  /** The team's tile fill (./colors); null when ESPN sent no colour, and its tiles keep the plain dark look. */
+  fill: TeamFill | null;
+  /** Set on the home side when its lines would read as the away side's: the lightness they take instead (./colors). */
+  lift: LineLift | null;
   logo: string;
   side: 'home' | 'away';
   score: number;
@@ -40,6 +44,9 @@ export interface Play {
   endDistance: number;
   yards: number;
   scoring: boolean;
+  /** Points the offense / the defense scored on this play: a flagged scoring play's own score change, else 0. */
+  offPts: number;
+  defPts: number;
   turnover: boolean;
   penalty: boolean;
   noPlay: boolean; // a penalty that wiped the play
@@ -88,6 +95,17 @@ export interface Situation {
   awayTimeouts: number | null;
 }
 
+/** A pause in the game that ESPN posts as its own row: the two-minute warnings and the ends of quarters. */
+export type BreakKind = 'two-minute' | 'end-quarter' | 'half' | 'end-regulation';
+
+export interface GameBreak {
+  kind: BreakKind;
+  period: number;
+  gameSec: number;
+  /** idx of the last play before the break; -1 when it comes before any play. */
+  afterIdx: number;
+}
+
 export interface Game {
   id: string;
   state: 'pre' | 'in' | 'post';
@@ -98,6 +116,8 @@ export interface Game {
   away: TeamInfo;
   plays: Play[];
   drives: Drive[];
+  /** Two-minute warnings and ends of quarters, in order; a replay keeps only the ones it has reached. */
+  breaks: GameBreak[];
   wpPoints: { gameSec: number; home: number }[];
   regulationSec: number;
   otLen: number;
@@ -110,6 +130,38 @@ export interface Game {
 }
 
 const ADMIN = /^(official timeout|timeout|two-minute warning|end period|end of half|end of game|end of regulation|coin toss)$/i;
+
+// The admin rows the story keeps as dividers (ESPN's type text, checked on the 2026 cache: "Two-minute warning",
+// "End Period", "End of Half", "End of Regulation"). Timeouts, the coin toss and the end of the game are left out.
+function breakKind(typeText: string): BreakKind | null {
+  const t = typeText.toLowerCase();
+  if (t === 'two-minute warning') return 'two-minute';
+  if (t === 'end period') return 'end-quarter';
+  if (t === 'end of half') return 'half';
+  if (t === 'end of regulation') return 'end-regulation';
+  return null;
+}
+
+// ESPN's play text names teams by the NFL gamebook's codes, which differ from ESPN's own abbreviations for six
+// teams (found by comparing the two across every cached 2026 game). MMG-CONTENT-IN-CODE: KEEP a fixed fact of
+// ESPN's feed format, not tuning; a code missing here is warned about once, never guessed.
+const GAMEBOOK_CODES: Record<string, string> = { ARZ: 'ARI', BLT: 'BAL', CLV: 'CLE', HST: 'HOU', LA: 'LAR', WAS: 'WSH' };
+const warnedCodes = new Set<string>();
+
+/** The team a play-text code ("SEA", "HST") names in this game, or null (warned once) when it names neither side. */
+export function teamFromCode(g: Pick<Game, 'home' | 'away'>, code: string): TeamInfo | null {
+  for (const c of [code, GAMEBOOK_CODES[code]]) {
+    if (!c) continue;
+    if (c === g.home.abbr) return g.home;
+    if (c === g.away.abbr) return g.away;
+  }
+  const k = `${code}:${g.away.abbr}@${g.home.abbr}`;
+  if (!warnedCodes.has(k)) {
+    warnedCodes.add(k);
+    console.warn(`Gridiron: play text names team "${code}", which is neither ${g.away.abbr} nor ${g.home.abbr}; its event is skipped`);
+  }
+  return null;
+}
 
 function hex(c: string | undefined, fallback: string): string {
   if (!c) return fallback;
@@ -125,14 +177,54 @@ function recordOf(c: EspnCompetitor): string {
   return r?.find((x) => !x.type || x.type === 'total')?.summary ?? r?.[0]?.summary ?? '';
 }
 
+const warnedColor = new Set<string>();
+const warnColorOnce = (key: string, msg: string) => {
+  if (warnedColor.has(key)) return;
+  warnedColor.add(key);
+  console.warn(msg);
+};
+const HEX6 = /^#?[0-9a-f]{6}$/i;
+
+/**
+ * A team's colours from ESPN, checked. No usable primary: no fill (the plain dark tile), grey accents. No usable
+ * alternate: a primary-only fill whose stripe is the text colour, and the primary stands in for the alternate, so an
+ * invalid value never reaches the page. Each logs once per team. scripts/team_contrast.py loads colours the same way.
+ */
+function coloursOf(t: EspnTeam): { color: string; color2: string; fill: TeamFill | null } {
+  const okPrimary = !!t.color && HEX6.test(t.color);
+  const okAlt = !!t.alternateColor && HEX6.test(t.alternateColor);
+  if (!okPrimary) {
+    warnColorOnce(`${t.abbreviation}:color`, `Gridiron: ESPN sent no team colour for ${t.abbreviation} (got ${JSON.stringify(t.color ?? null)}); its tiles keep the plain dark look`);
+    const color = '#666666';
+    return { color, color2: okAlt ? hex(t.alternateColor, color) : '#999999', fill: null };
+  }
+  const color = hex(t.color, '#666666');
+  if (!okAlt) {
+    warnColorOnce(
+      `${t.abbreviation}:alt`,
+      `Gridiron: ESPN sent no usable alternate colour for ${t.abbreviation} (got ${JSON.stringify(t.alternateColor ?? null)}); its tiles use the primary alone, striped in the text colour`,
+    );
+  }
+  const color2 = okAlt ? hex(t.alternateColor, color) : color;
+  return { color, color2, fill: teamFill({ color, color2 }) };
+}
+
+/** The home team as it shows beside the away team: one colour per team per view (./colors `pairHome`). */
+export function homeBeside(away: TeamInfo, home: TeamInfo): TeamInfo {
+  return pairHome(away, home);
+}
+
 export function teamInfo(c: EspnCompetitor): TeamInfo {
+  const { color, color2, fill } = coloursOf(c.team);
   return {
     id: c.team.id,
     abbr: c.team.abbreviation,
     name: c.team.displayName,
     short: c.team.shortDisplayName ?? c.team.name ?? c.team.abbreviation,
-    color: hex(c.team.color, '#666666'),
-    color2: hex(c.team.alternateColor, '#999999'),
+    color,
+    color2,
+    fill,
+    lift: null,
     logo: logoOf(c.team),
     side: c.homeAway,
     score: Number(c.score ?? 0) || 0,
@@ -248,7 +340,7 @@ export function buildGame(s: EspnSummary, opts: BuildOptions = {}): Game {
   const homeC = comp.competitors.find((c) => c.homeAway === 'home')!;
   const awayC = comp.competitors.find((c) => c.homeAway === 'away')!;
   const away = teamInfo(awayC);
-  const home = apart(away, teamInfo(homeC));
+  const home = homeBeside(away, teamInfo(homeC));
   const seasonType = s.header.season?.type ?? 2;
   const otLen = seasonType === 3 ? 900 : 600;
   const abbrOf = (id: string) => (id === home.id ? home.abbr : id === away.id ? away.abbr : '');
@@ -267,10 +359,20 @@ export function buildGame(s: EspnSummary, opts: BuildOptions = {}): Game {
 
   const plays: Play[] = [];
   const drives: Drive[] = [];
+  const breaks: GameBreak[] = [];
   let prevWp: number | null = null;
   let prevHome = 0;
   let prevAway = 0;
+  let rawPrevHome = 0;
+  let rawPrevAway = 0;
   const limit = opts.upto ?? Infinity;
+
+  // The score on the next play row, for telling a glitch row from a real score change (see below).
+  const nextScore = new Map<string, { home?: number; away?: number }>();
+  {
+    const flat = rawDrives.flatMap((d) => (d.plays ?? []).filter((p) => !ADMIN.test(p.type?.text ?? '')));
+    for (let i = 0; i + 1 < flat.length; i++) nextScore.set(flat[i].id, { home: flat[i + 1].homeScore, away: flat[i + 1].awayScore });
+  }
 
   for (const rd of rawDrives) {
     if (plays.length >= limit) break;
@@ -301,7 +403,11 @@ export function buildGame(s: EspnSummary, opts: BuildOptions = {}): Game {
 
     for (const p of rd.plays ?? []) {
       if (plays.length >= limit) break;
-      if (ADMIN.test(p.type?.text ?? '')) continue;
+      if (ADMIN.test(p.type?.text ?? '')) {
+        const bk = breakKind(p.type?.text ?? '');
+        if (bk) breaks.push({ kind: bk, period: p.period.number, gameSec: gameSeconds(p.period.number, p.clock.displayValue, otLen), afterIdx: plays.length - 1 });
+        continue;
+      }
       const kind = classify(p);
       const offenseId = p.start.team?.id ?? teamId;
       const defenseId = otherOf(offenseId);
@@ -311,13 +417,28 @@ export function buildGame(s: EspnSummary, opts: BuildOptions = {}): Game {
       const endTeamId = p.end.team?.id ?? offenseId;
       const yards = p.statYardage ?? 0;
       const noPlay = isNoPlay(p);
-      // ESPN sometimes dips a score for one row and restores it on the next. Scores never go down in a game,
-      // and only a flagged scoring play earns the points, so a dip can't fake a defensive touchdown.
-      const homeScore = Math.max(prevHome, p.homeScore ?? prevHome);
-      const awayScore = Math.max(prevAway, p.awayScore ?? prevAway);
+      // ESPN sometimes dips a score for one row and restores it on the next (an extra point being retried), and
+      // sometimes jumps it ahead for one row and drops it back (a 2026 IND-TEN row read TEN 20 while TEN had 6,
+      // which, held as a high-water mark, hid TEN's next two touchdowns; PIT-ATL and DEN-LAC lost a field goal the
+      // same way). So an unflagged row's new score counts only when the next row agrees, and scores never go down.
+      // Only a flagged scoring play earns points, so neither glitch can fake or hide a score.
       const flagged = !!p.scoringPlay;
-      const offPts = flagged ? (offenseId === home.id ? homeScore - prevHome : awayScore - prevAway) : 0;
-      const defPts = flagged ? (offenseId === home.id ? awayScore - prevAway : homeScore - prevHome) : 0;
+      const next = nextScore.get(p.id);
+      const confirmed = flagged || !next || (next.home === p.homeScore && next.away === p.awayScore);
+      const homeScore = confirmed ? Math.max(prevHome, p.homeScore ?? prevHome) : prevHome;
+      const awayScore = confirmed ? Math.max(prevAway, p.awayScore ?? prevAway) : prevAway;
+      // A flagged row's points are its own score change (ESPN's raw scores, this row against the one before), so points
+      // an unconfirmed unflagged row held back never ride in on it as part of this play. When the row before read
+      // higher (a one-row glitch), the scores held so far are the base instead.
+      const rawH = p.homeScore ?? rawPrevHome;
+      const rawA = p.awayScore ?? rawPrevAway;
+      const own = rawH >= rawPrevHome && rawA >= rawPrevAway;
+      const dh = flagged ? Math.max(0, own ? rawH - rawPrevHome : homeScore - prevHome) : 0;
+      const da = flagged ? Math.max(0, own ? rawA - rawPrevAway : awayScore - prevAway) : 0;
+      rawPrevHome = rawH;
+      rawPrevAway = rawA;
+      const offPts = offenseId === home.id ? dh : da;
+      const defPts = offenseId === home.id ? da : dh;
       // A snap that counts for EPA (as nflverse counts it: real passes and runs, including ones a flag wiped out),
       // and the narrower set that counts for success, explosives and turnovers (the play stood).
       const attempt = (kind === 'pass' || kind === 'rush') && down > 0 && !isClockPlay(p);
@@ -351,6 +472,8 @@ export function buildGame(s: EspnSummary, opts: BuildOptions = {}): Game {
         endDistance: p.end.distance ?? 0,
         yards,
         scoring: flagged,
+        offPts,
+        defPts,
         turnover,
         penalty: !!p.isPenalty || kind === 'penalty',
         noPlay,
@@ -435,6 +558,7 @@ export function buildGame(s: EspnSummary, opts: BuildOptions = {}): Game {
     away,
     plays,
     drives,
+    breaks,
     wpPoints,
     regulationSec,
     otLen,

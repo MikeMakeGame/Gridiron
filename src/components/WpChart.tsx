@@ -1,13 +1,10 @@
 // Whole-game win probability. Home on top. Drag or tap to read any play. Under the chart, a rail of markers for the
-// plays that mattered (scores, turnovers, big swings, anything with a highlight clip), shaped like the drive caps.
+// story's events the filter chips leave on (scores, turnovers, big swings, ...), shaped like the drive caps.
 import type { Game } from '../espn/model';
 import { periodLabel } from '../espn/model';
-import { useWidth } from '../hooks/usePoll';
+import { SHORT_SCREEN, useWidth } from '../hooks/usePoll';
 import { teamVars, wpText } from '../format';
-import { momentLabel, RANK, type Moment, type MomentKind } from '../stats/moments';
-
-const H = 96;
-const GAP = 14; // two markers closer than this keep the higher-ranked one
+import { railMarks, type Moment } from '../stats/moments';
 
 export function WpChart({
   g,
@@ -23,6 +20,9 @@ export function WpChart({
   onSelect?: (playId: string | null) => void;
 }) {
   const [ref, w] = useWidth<HTMLDivElement>();
+  // On a short screen the pinned chart gives up height so the list under it keeps most of the screen (decided once
+  // per load, so it never resizes mid-scroll).
+  const H = SHORT_SCREEN ? 64 : 96;
   const pts = g.plays.filter((p) => p.wpHome != null);
   const span = g.regulationSec;
   const x = (s: number) => (s / span) * w;
@@ -45,11 +45,13 @@ export function WpChart({
   const selWp = sel?.wpHome ?? null;
   const homeNow = last?.wpHome ?? null;
   const done = g.state === 'post';
-  const rail = w ? thin(marks, (m) => x(m.play.gameSec)) : [];
+  // Every score keeps its marker; crowded ones are nudged apart, and the guide line runs from the play's true spot
+  // on the chart to its marker.
+  const rail = w ? railMarks(marks, (m: Moment) => x(m.play.gameSec), w) : [];
 
   return (
     <div class="wpchart-wrap">
-      <div class="wpchart" ref={ref} onPointerDown={onPoint} onPointerMove={(e) => e.buttons && onPoint(e)} role="img" aria-label="Win probability chart">
+      <div class="wpchart" ref={ref} style={{ height: `${H}px` }} onPointerDown={onPoint} onPointerMove={(e) => e.buttons && onPoint(e)} role="img" aria-label="Win probability chart">
         {w > 0 && (
           <svg width={w} height={H} viewBox={`0 0 ${w} ${H}`}>
             {Array.from({ length: quarters }, (_, i) => (
@@ -64,13 +66,13 @@ export function WpChart({
             <text class="wp-qlabel" x={w - 2} y={y(0.5) - 3} text-anchor="end">
               50%
             </text>
-            {rail.map((m) => (
-              <line key={`g${m.play.id}`} class={`wp-guide${m.play.id === selected ? ' is-sel' : ''}`} x1={x(m.play.gameSec)} x2={x(m.play.gameSec)} y1={y(m.play.wpHome ?? 0.5)} y2={H} />
+            {rail.map(({ m, px }) => (
+              <line key={`g${m.key}`} class={`wp-guide${m.play.id === selected ? ' is-sel' : ''}`} x1={x(m.play.gameSec)} x2={px} y1={y(m.play.wpHome ?? 0.5)} y2={H} />
             ))}
             {d && <path class="wp-line" d={d} />}
-            {rail.map((m) =>
+            {rail.map(({ m }) =>
               m.play.wpHome != null ? (
-                <circle key={`d${m.play.id}`} class="wp-dot" style={teamVars(m.teamId === g.home.id ? g.home : g.away)} cx={x(m.play.gameSec)} cy={y(m.play.wpHome)} r={m.kind === 'swing' ? 2.5 : 3.5} />
+                <circle key={`d${m.key}`} class="wp-dot" style={teamVars(m.teamId === g.home.id ? g.home : g.away)} cx={x(m.play.gameSec)} cy={y(m.play.wpHome)} r={m.kind === 'swing' ? 2.5 : 3.5} />
               ) : null,
             )}
             {last && <circle class="wp-now" cx={x(last.gameSec)} cy={y(last.wpHome!)} r={4} />}
@@ -99,14 +101,14 @@ export function WpChart({
       </div>
       {rail.length > 0 && (
         <div class="wp-rail" aria-label="Key plays">
-          {rail.map((m) => (
+          {rail.map(({ m, px }) => (
             <button
-              key={m.play.id}
+              key={m.key}
               class={`mk mk-${m.kind}${m.play.id === selected ? ' is-sel' : ''}`}
-              style={{ left: `${x(m.play.gameSec)}px`, ...teamVars(m.teamId === g.home.id ? g.home : g.away) }}
+              style={{ left: `${px}px`, ...teamVars(m.teamId === g.home.id ? g.home : g.away) }}
               onClick={() => onSelect?.(m.play.id === selected ? null : m.play.id)}
-              aria-label={`${momentLabel(m)}, ${periodLabel(m.play.period)} ${m.play.clock}`}
-              title={`${momentLabel(m)} · ${periodLabel(m.play.period)} ${m.play.clock}`}
+              aria-label={`${m.label}, ${periodLabel(m.play.period)} ${m.play.clock}`}
+              title={`${m.label} · ${periodLabel(m.play.period)} ${m.play.clock}`}
             >
               <span class="mk-shape" />
               {clipIds?.has(m.play.id) && m.kind !== 'clip' && <span class="mk-film" aria-hidden="true" />}
@@ -114,7 +116,7 @@ export function WpChart({
           ))}
         </div>
       )}
-      {rail.length > 0 && <Legend kinds={new Set(rail.map((m) => m.kind))} clip={rail.some((m) => clipIds?.has(m.play.id))} />}
+      {/* No legend: the filter chips under the chart wear the same shapes. */}
       <div class="wp-readout">
         {sel ? (
           <>
@@ -138,46 +140,3 @@ export function WpChart({
   );
 }
 
-// One line saying what the shapes mean, naming only the ones on this game's rail.
-const LEGEND: [MomentKind[], MomentKind, string][] = [
-  [['td', 'safety'], 'td', 'Touchdown'],
-  [['fg'], 'fg', 'Field goal'],
-  [['int', 'fumble'], 'int', 'Turnover'],
-  [['downs'], 'downs', 'On downs'],
-  [['miss'], 'miss', 'Missed FG'],
-  [['swing'], 'swing', 'Big swing'],
-];
-
-function Legend({ kinds, clip }: { kinds: Set<MomentKind>; clip: boolean }) {
-  return (
-    <div class="mk-legend" aria-hidden="true">
-      {LEGEND.filter(([ks]) => ks.some((k) => kinds.has(k))).map(([, k, label]) => (
-        <span key={k}>
-          <span class={`mk mk-${k} is-static`}>
-            <span class="mk-shape" />
-          </span>
-          {label}
-        </span>
-      ))}
-      {(clip || kinds.has('clip')) && (
-        <span>
-          <span class="mk mk-clip is-static">
-            <span class="mk-shape" />
-          </span>
-          Clip
-        </span>
-      )}
-    </div>
-  );
-}
-
-// Keep the rail readable: walk the markers best-first and drop any that would sit on top of a better one.
-function thin(marks: Moment[], at: (m: Moment) => number): Moment[] {
-  const kept: { m: Moment; px: number }[] = [];
-  const ranked = [...marks].sort((a, b) => RANK[b.kind] - RANK[a.kind] || Math.abs(b.play.wpDelta) - Math.abs(a.play.wpDelta));
-  for (const m of ranked) {
-    const px = at(m);
-    if (kept.every((k) => Math.abs(k.px - px) >= GAP)) kept.push({ m, px });
-  }
-  return kept.map((k) => k.m).sort((a, b) => a.play.idx - b.play.idx);
-}

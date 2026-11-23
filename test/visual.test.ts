@@ -6,7 +6,6 @@ import { matchClips } from '../src/espn/clips';
 import { compareRows, edge, tally } from '../src/stats/teamstats';
 import { moments } from '../src/stats/moments';
 import { spotX } from '../src/components/Field';
-import { apart } from '../src/format';
 import type { EspnPlay, EspnSummary, EspnVideo } from '../src/espn/types';
 
 const HOME = '1';
@@ -186,21 +185,6 @@ describe('a drive that has just started', () => {
     expect(d.endPos).toBe(36);
     // Home attacks leftward: its own 30 is 70 yards from the away goal line.
     expect(spotX(g, HOME, 70)).toBe(70);
-  });
-});
-
-describe('team colours that read as one', () => {
-  it('gives the home side plain ink when both teams are gold (black-and-gold away, tan home)', () => {
-    const away = { color: '#000000', color2: '#ffb612' };
-    const home = { color: '#d3bc8d', color2: '#000000' };
-    expect(apart(away, home).color).toBe('#f4f6f8');
-  });
-  it('gives the home side its alternate when that one stands apart', () => {
-    expect(apart({ color: '#aa0000', color2: '#b3995d' }, { color: '#c8102e', color2: '#0b2265' }).color).toBe('#0b2265');
-  });
-  it('leaves teams that already differ alone', () => {
-    const home = { color: '#0076b6', color2: '#b0b7bc' };
-    expect(apart({ color: '#203731', color2: '#ffb612' }, home)).toBe(home);
   });
 });
 

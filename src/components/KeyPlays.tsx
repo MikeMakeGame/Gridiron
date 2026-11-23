@@ -1,44 +1,67 @@
-// The timeline's markers as a list: each play that mattered, with its time, what it was, the score after it, and
-// ESPN's highlight clip when there is one (a thumbnail that opens ESPN's own player).
+// The story as a list: each event with its time, what it was, the score after it, a line more (who was hurt, the
+// penalty, how the punt ended), and ESPN's highlight clip when there is one (a thumbnail that opens ESPN's own
+// player). Quarter dividers between them. Above the list, the filter chips; the chart and the chips stay pinned
+// while the list scrolls under them.
 import { useEffect, useRef } from 'preact/hooks';
 import type { Game } from '../espn/model';
 import { periodLabel } from '../espn/model';
 import type { Clip } from '../espn/clips';
-import { momentLabel, type Moment } from '../stats/moments';
-import { teamVars } from '../format';
+import { GROUP_LABEL, GROUP_SHAPE, GROUPS, type MomentGroup, type StoryRow } from '../stats/moments';
+import { fillClass, teamVars } from '../format';
 import { WpDelta } from './Badges';
 
 export function KeyPlays({
   g,
-  marks,
+  rows,
+  total,
   clips,
   selected,
   onSelect,
 }: {
   g: Game;
-  marks: Moment[];
+  rows: StoryRow[];
+  /** Events before filtering, to tell "nothing yet" from "nothing with these filters". */
+  total: number;
   clips: Map<string, Clip>;
   selected: string | null;
   onSelect: (id: string | null) => void;
 }) {
   const list = useRef<HTMLOListElement>(null);
-  // A marker tapped on the chart brings its row into view.
+  // A marker tapped on the chart brings its row into view between the pinned chart and the dock, moving the page
+  // only as far as it must (a row already in view stays put), so the chart never leaves the screen.
   useEffect(() => {
-    if (!selected) return;
-    list.current?.querySelector(`[data-play="${selected}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    if (!selected || !list.current) return;
+    const row = list.current.querySelector<HTMLElement>(`[data-play="${selected}"]`);
+    // No row for it: the play was picked by dragging along the chart, or a chip has since hidden its event. Nothing
+    // to scroll to, and nothing wrong, so no log.
+    if (!row) return;
+    const pin = list.current.closest('.story')?.querySelector('.story-pin');
+    const top = (pin?.getBoundingClientRect().bottom ?? 0) + 8;
+    const bottom = (document.querySelector('.dock')?.getBoundingClientRect().top ?? window.innerHeight) - 8;
+    const r = row.getBoundingClientRect();
+    const by = r.top < top ? r.top - top : r.bottom > bottom ? Math.min(r.bottom - bottom, r.top - top) : 0;
+    if (by) window.scrollBy({ top: by, behavior: 'smooth' });
   }, [selected]);
 
-  if (!marks.length) return <p class="empty">No scores, turnovers or big swings yet.</p>;
-  // Newest first while it's live (the thing that just happened is on top); in order once it's over.
-  const ordered = g.state === 'post' ? marks : [...marks].reverse();
+  if (!total) return <p class="empty">No scores, turnovers or big swings yet.</p>;
+  if (!rows.some((r) => r.type === 'event')) return <p class="empty">Nothing with these filters. Switch a chip on above.</p>;
   return (
     <ol class="keyplays" ref={list}>
-      {ordered.map((m) => {
+      {rows.map((r) => {
+        if (r.type === 'divider') {
+          return (
+            <li key={r.d.key} class={`kp-rule${r.d.minor ? ' is-minor' : ''}`}>
+              <span>{r.d.label}</span>
+              {r.d.score && <span class="kp-rule-score">{r.d.score}</span>}
+            </li>
+          );
+        }
+        const m = r.m;
         const t = m.teamId === g.home.id ? g.home : g.away;
-        const clip = clips.get(m.play.id);
+        const clip = m.primary ? clips.get(m.play.id) : undefined;
         return (
           <li
-            key={m.play.id}
+            key={m.key}
             data-play={m.play.id}
             class={`kp kp-${m.kind}${m.play.id === selected ? ' is-sel' : ''}`}
             style={teamVars(t)}
@@ -50,24 +73,47 @@ export function KeyPlays({
             <div class="kp-main">
               <div class="kp-head">
                 {/* The team as a chip, so "NO" reads as New Orleans and never as "no highlight". */}
-                <span class="kp-team">{t.abbr}</span>
-                <b class="kp-kind">{momentLabel(m)}</b>
+                <span class={`kp-team${fillClass(t)}`}>{t.abbr}</span>
+                <b class="kp-kind">{m.label}</b>
                 <span class="kp-when">
                   {periodLabel(m.play.period)} {m.play.clock}
                 </span>
                 {m.score && <span class="kp-score">{m.score}</span>}
               </div>
-              <div class="kp-text">{m.play.text}</div>
+              {m.detail && <div class="kp-detail">{m.detail}</div>}
+              {/* An injury or a flag riding on a play repeats none of it: its line says what it needs. */}
+              {m.primary && <div class="kp-text">{m.play.text}</div>}
               {/* A swing under 3 points is noise next to a score; the badge shows only when it says something. */}
-              <div class="kp-badges">
-                <WpDelta g={g} p={m.play} min={0.03} />
-              </div>
+              {m.primary && (
+                <div class="kp-badges">
+                  <WpDelta g={g} p={m.play} min={0.03} />
+                </div>
+              )}
             </div>
             {clip && <ClipThumb clip={clip} />}
           </li>
         );
       })}
     </ol>
+  );
+}
+
+/** One chip per kind of event, with its marker shape and how many this game has; a chip with none is left out. */
+export function StoryFilters({ on, counts, onToggle }: { on: ReadonlySet<MomentGroup>; counts: Record<MomentGroup, number>; onToggle: (g: MomentGroup) => void }) {
+  const shown = GROUPS.filter((k) => counts[k] > 0);
+  if (!shown.length) return null;
+  return (
+    <div class="chips" role="group" aria-label="Show in the story">
+      {shown.map((k) => (
+        <button key={k} type="button" class={`chip chip-${k}${on.has(k) ? ' is-on' : ''}`} aria-pressed={on.has(k)} onClick={() => onToggle(k)}>
+          <span class={`mk mk-${GROUP_SHAPE[k]} is-static`} aria-hidden="true">
+            <span class="mk-shape" />
+          </span>
+          {GROUP_LABEL[k]}
+          <span class="chip-n">{counts[k]}</span>
+        </button>
+      ))}
+    </div>
   );
 }
 

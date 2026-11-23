@@ -1,51 +1,33 @@
 import type { TeamInfo } from './espn/model';
+import { shownColor as shown, type LineLift, type TeamFill } from './espn/colors';
 
 export const pct = (x: number | null | undefined, digits = 0) => (x == null ? '–' : `${(x * 100).toFixed(digits)}%`);
 export const num = (x: number | null | undefined, digits = 1) => (x == null ? '–' : x.toFixed(digits));
 export const signed = (x: number | null | undefined, digits = 2) =>
   x == null ? '–' : `${x > 0 ? '+' : x < 0 ? '−' : ''}${Math.abs(x).toFixed(digits)}`;
 
-export function teamVars(t: Pick<TeamInfo, 'color' | 'color2'>): Record<string, string> {
-  return { '--tc': isNeutral(t.color) ? t.color2 : t.color, '--tc2': t.color2 };
+/**
+ * A team's colours as CSS custom properties: `--tc` / `--tc2` for accents (lifted per look in styles.css); when its
+ * lines would read as the other team's, `--ta-ln` / `--ta-ld` (the lightness its lines take on night and day); and,
+ * when ESPN gave the team a colour, its fill: `--fill`, `--on-fill` (text, picked by contrast) and `--fill2` (the
+ * stripe). Every colour decision is in ./espn/colors (`pairHome`).
+ */
+export function teamVars(t: Pick<TeamInfo, 'color' | 'color2'> & { fill?: TeamFill | null; lift?: LineLift | null }): Record<string, string> {
+  const v: Record<string, string> = { '--tc': shown(t), '--tc2': t.color2 };
+  if (t.lift) {
+    v['--ta-ln'] = t.lift.night.toFixed(3);
+    v['--ta-ld'] = t.lift.day.toFixed(3);
+  }
+  if (t.fill) {
+    v['--fill'] = t.fill.bg;
+    v['--on-fill'] = t.fill.fg;
+    v['--fill2'] = t.fill.accent;
+  }
+  return v;
 }
 
-// Black, white and greys carry no team identity on a dark page.
-function isNeutral(hex: string): boolean {
-  const m = hex.match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
-  if (!m) return false;
-  const [r, g, b] = m.slice(1).map((x) => parseInt(x, 16));
-  return Math.max(r, g, b) - Math.min(r, g, b) < 24;
-}
-
-function hue(hex: string): number | null {
-  const m = hex.match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
-  if (!m) return null;
-  const [r, g, b] = m.slice(1).map((x) => parseInt(x, 16) / 255);
-  const max = Math.max(r, g, b);
-  const d = max - Math.min(r, g, b);
-  if (!d) return null;
-  const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
-  return (h * 60 + 360) % 360;
-}
-
-const shown = (t: Pick<TeamInfo, 'color' | 'color2'>) => (isNeutral(t.color) ? t.color2 : t.color);
-
-function clash(a: string, b: string): boolean {
-  const ha = hue(a);
-  const hb = hue(b);
-  if (ha == null || hb == null || isNeutral(a) || isNeutral(b)) return false;
-  const d = Math.abs(ha - hb);
-  return Math.min(d, 360 - d) < 35;
-}
-
-/** Two teams whose colours read as one (PIT gold and NO tan): the home side takes its other colour, or plain ink. */
-export function apart<T extends Pick<TeamInfo, 'color' | 'color2'>>(away: T, home: T): T {
-  const a = shown(away);
-  if (!clash(a, shown(home))) return home;
-  const other = isNeutral(home.color) ? home.color : home.color2;
-  const pick = !isNeutral(other) && !clash(a, other) ? other : '#f4f6f8';
-  return { ...home, color: pick, color2: pick };
-}
+/** ' has-fill' for an element that wears the team's fill (styles.css keys every fill rule on it), else ''. */
+export const fillClass = (t: { fill?: TeamFill | null }): string => (t.fill ? ` has-fill${t.fill.divider ? ' is-split' : ''}` : '');
 
 // ESPN's dark-background logo set (navy and black marks vanish on this page otherwise), resized by ESPN's image
 // combiner instead of the 500px PNG; the snapshot bundles its own copies.

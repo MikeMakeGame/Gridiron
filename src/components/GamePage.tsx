@@ -1,19 +1,26 @@
-// One game, in four tabs under a sticky score bar: Live (the field, the situation, the last play), Story (win
-// probability with its key plays marked, then the drives), Stats (head to head) and Players (the box score).
+// One game, in five tabs under a sticky score bar: Live (the field, the situation, the last play), Story (win
+// probability with its key plays marked, then the drives), Standouts (the best and roughest players), Stats (head
+// to head, against the league average) and Players (the position compare, then the box score).
 // A bottom dock holds back and the game's one action.
 import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { getEpTable, getScoreboardForDay, getSummary, SNAPSHOT } from '../espn/api';
+import { getBaselines, getEpTable, getScoreboardForDay, getSummary, SNAPSHOT } from '../espn/api';
 import { gameInterval } from '../espn/cadence';
 import { matchClips } from '../espn/clips';
 import { buildGame, firstSnap, periodLabel, type Game, type Play, type TeamInfo } from '../espn/model';
 import { biggestPlays, possessionsLeft } from '../stats/live';
-import { moments } from '../stats/moments';
+import { dividers, groupCounts, moments, storyRows, visibleMoments } from '../stats/moments';
+import { useStoryFilters } from '../hooks/useStoryFilters';
+import { useBaseline } from '../hooks/useBaseline';
+import type { Baselines } from '../stats/baselines';
+import { BaselineSwitch } from './Baseline';
+import { Standouts } from './Standouts';
+import { Fold } from './Fold';
 import { compareRows, edge, type CompareRow } from '../stats/teamstats';
 import type { EspnSummary } from '../espn/types';
 import type { EpTable } from '../stats/ep';
-import { agoText, smallLogo, teamVars, wpText } from '../format';
-import { useNow, usePoll } from '../hooks/usePoll';
+import { agoText, fillClass, smallLogo, teamVars, wpText } from '../format';
+import { SHORT_SCREEN, useHeight, useNow, usePoll } from '../hooks/usePoll';
 import { Fresh } from './Fresh';
 import { Logo } from './Logo';
 import { boardHref, go, linkTo, useBoardWeek } from '../route';
@@ -26,13 +33,13 @@ import { Players } from './Players';
 import { Advanced } from './Advanced';
 import { WpDelta } from './Badges';
 import { Field, type Spot } from './Field';
-import { Compare, TeamStats } from './TeamStats';
-import { ClipThumb, KeyPlays } from './KeyPlays';
+import { Compare, TeamStats, type AvgCtx } from './TeamStats';
+import { ClipThumb, KeyPlays, StoryFilters } from './KeyPlays';
 import { Icon } from './Icons';
 import { Footer } from './Scoreboard';
 
-type Tab = 'now' | 'story' | 'stats' | 'players';
-const TABS: Tab[] = ['now', 'story', 'stats', 'players'];
+type Tab = 'now' | 'story' | 'standouts' | 'stats' | 'players';
+const TABS: Tab[] = ['now', 'story', 'standouts', 'stats', 'players'];
 
 // The tab lives in the link (#/g/<id>/stats), so a reload or a shared link opens where it was.
 function tabFromHash(): Tab | null {
@@ -75,9 +82,16 @@ export function GamePage({ id }: { id: string }) {
   const [playing, setPlaying] = useState(false);
   const [picked, setTab] = useState<Tab | null>(tabFromHash);
   const [selected, setSelected] = useState<string | null>(null);
+  const [filters, toggleFilter] = useStoryFilters();
+  // The score bar's height, so the Story tab's chart pins just under it.
+  const [headRef, headH] = useHeight<HTMLDivElement>();
+  // League averages for the Stats and Players tabs, and the standouts' weights; optional like the EP table.
+  const [base, setBase] = useState<Baselines | null>(null);
+  const [baseId, pickBase] = useBaseline(base);
 
   useEffect(() => {
     getEpTable().then(setEp);
+    getBaselines().then(setBase);
   }, []);
 
   // A link to another tab of this same game (typed, or pasted) switches the tab.
@@ -209,7 +223,11 @@ export function GamePage({ id }: { id: string }) {
     return { ...allClips, byPlay: new Map([...allClips.byPlay].filter(([id]) => reached.has(id))) };
   }, [allClips, g, full]);
   const clipIds = useMemo(() => new Set(clips.byPlay.keys()), [clips]);
-  const marks = useMemo(() => (g ? moments(g, clipIds) : []), [g, clipIds]);
+  // Every event in the story, then the ones the chips leave on (the chart's rail and the list both show those).
+  const events = useMemo(() => (g ? moments(g, clipIds) : []), [g, clipIds]);
+  const marks = useMemo(() => visibleMoments(events, filters), [events, filters]);
+  const counts = useMemo(() => groupCounts(events), [events]);
+  const rows = useMemo(() => (g ? storyRows(marks, dividers(g), g.state !== 'post') : []), [g, marks]);
 
   // Live opens on the field; a final opens on its story. A dot on Story when a key play lands while it's out of view.
   // The opening tab is decided once, when the game first loads: a game going final, or a replay, never moves the reader.
@@ -256,19 +274,22 @@ export function GamePage({ id }: { id: string }) {
   const sitText = ahead ? ahead.situation : sit?.text;
   const redZone = ahead ? ahead.redZone : !!sit?.redZone;
   const giveaways = turnoverCounts(g);
+  const won = results(g);
+  // Totals are compared with the average only once the game is over (a replay's cut is mid-game).
+  const avg: AvgCtx = { base, id: baseId, final: g.state === 'post' && !g.truncated };
 
   return (
-    <div class="app view-game">
-      <div class="game-head">
+    <div class={`app view-game${SHORT_SCREEN ? ' is-short' : ''}`} style={headH ? { '--head-h': `${headH}px` } : undefined}>
+      <div class="game-head" ref={headRef}>
         <header class="scorebar">
-          <TeamCell t={withScore(g.away, ahead?.away)} poss={poss === g.away.id} tos={sit?.awayTimeouts ?? null} giveaways={giveaways.away} pre={g.state === 'pre'} />
+          <TeamCell t={withScore(g.away, ahead?.away)} poss={poss === g.away.id} tos={sit?.awayTimeouts ?? null} giveaways={giveaways.away} pre={g.state === 'pre'} result={won.away} />
           <div class="sbar-mid">
             <div class="clock">
               {live && <Icon name="clock" size={14} />}
               {g.clockText}
             </div>
           </div>
-          <TeamCell t={withScore(g.home, ahead?.home)} poss={poss === g.home.id} tos={sit?.homeTimeouts ?? null} giveaways={giveaways.home} pre={g.state === 'pre'} />
+          <TeamCell t={withScore(g.home, ahead?.home)} poss={poss === g.home.id} tos={sit?.homeTimeouts ?? null} giveaways={giveaways.home} pre={g.state === 'pre'} result={won.home} />
         </header>
         <nav class="tabs" role="tablist" aria-label="Game">
           {TABS.map((t) => (
@@ -355,30 +376,42 @@ export function GamePage({ id }: { id: string }) {
       )}
 
       {tab === 'story' && (
-        <section class="tabpane" role="tabpanel">
-          {g.plays.length > 0 ? (
-            <WpChart g={g} marks={marks} clipIds={clipIds} selected={selected} onSelect={setSelected} />
-          ) : (
-            <p class="empty">The story starts at kickoff.</p>
-          )}
-          <h3 class="sub-title">Key plays</h3>
-          <KeyPlays g={g} marks={marks} clips={clips.byPlay} selected={selected} onSelect={setSelected} />
+        <section class="tabpane is-story" role="tabpanel">
+          {/* The chart, its rail and the chips stay pinned under the score bar while the list scrolls beneath them. */}
+          <div class="story">
+            <div class="story-pin">
+              {g.plays.length > 0 ? (
+                <WpChart g={g} marks={marks} clipIds={clipIds} selected={selected} onSelect={setSelected} />
+              ) : (
+                <p class="empty">The story starts at kickoff.</p>
+              )}
+              <StoryFilters on={filters} counts={counts} onToggle={toggleFilter} />
+            </div>
+            <KeyPlays g={g} rows={rows} total={events.length} clips={clips.byPlay} selected={selected} onSelect={setSelected} />
+          </div>
+          {/* The drives sit past the list, one tap away, so the pinned chart never rides over them. */}
           {g.drives.length > 0 && (
-            <>
-              <h3 class="sub-title">Drives</h3>
+            <Fold id="story-drives" label="Drives" headline={`${g.drives.length} drive${g.drives.length === 1 ? '' : 's'}`}>
               <Drives g={g} fresh={fresh} />
-            </>
+            </Fold>
           )}
+        </section>
+      )}
+
+      {tab === 'standouts' && (
+        <section class="tabpane" role="tabpanel">
+          <Standouts g={g} base={base} epReady={!!ep} />
         </section>
       )}
 
       {tab === 'stats' && (
         <section class="tabpane" role="tabpanel">
-          <TeamStats g={g} />
+          <BaselineSwitch base={base} id={baseId} onPick={pickBase} />
+          <TeamStats g={g} avg={avg} />
           {g.plays.length > 0 && (
             <>
               <h3 class="sub-title">How well they're playing</h3>
-              <Numbers g={g} epReady={!!ep} />
+              <Numbers g={g} epReady={!!ep} avg={avg} />
             </>
           )}
           {g.state === 'post' && !g.truncated && <Advanced g={g} />}
@@ -387,7 +420,7 @@ export function GamePage({ id }: { id: string }) {
 
       {tab === 'players' && (
         <section class="tabpane" role="tabpanel">
-          <Players g={g} />
+          <Players g={g} avg={avg} onPick={pickBase} />
         </section>
       )}
 
@@ -509,7 +542,7 @@ function WpSpark({ g }: { g: Game }) {
 
 function tabLabel(t: Tab, g: Game): string {
   if (t === 'now') return g.state === 'pre' ? 'Preview' : g.state === 'post' ? 'Final' : 'Live';
-  return t === 'story' ? 'Story' : t === 'stats' ? 'Stats' : 'Players';
+  return t === 'story' ? 'Story' : t === 'standouts' ? 'Standouts' : t === 'stats' ? 'Stats' : 'Players';
 }
 
 // What the field says when there's no ball on it.
@@ -564,14 +597,30 @@ function withScore(t: TeamInfo, s: number | undefined): TeamInfo {
   return s != null && Number.isFinite(s) && s > t.score ? { ...t, score: s } : t;
 }
 
-function TeamCell({ t, poss, tos, giveaways, pre }: { t: TeamInfo; poss: boolean; tos: number | null; giveaways: number; pre: boolean }) {
+type Result = 'winner' | 'loser' | null;
+
+/** A final's winner and loser (a tie, a live game and a replay's cut have neither). */
+function results(g: Game): { away: Result; home: Result } {
+  if (g.state !== 'post' || g.truncated || g.away.score === g.home.score) return { away: null, home: null };
+  const awayWon = g.away.score > g.home.score;
+  return { away: awayWon ? 'winner' : 'loser', home: awayWon ? 'loser' : 'winner' };
+}
+
+function TeamCell({ t, poss, tos, giveaways, pre, result }: { t: TeamInfo; poss: boolean; tos: number | null; giveaways: number; pre: boolean; result: Result }) {
   return (
-    <div class={`sbar-team ${t.side}`} style={teamVars(t)}>
-      {t.logo && <Logo src={smallLogo(t.logo, 80)} abbr={t.abbr} size={32} />}
+    <div class={`sbar-team ${t.side}${fillClass(t)}${result ? ` is-${result}` : ''}`} style={teamVars(t)}>
+      {t.logo && <Logo src={smallLogo(t.logo, 80)} abbr={t.abbr} size={32} on={t.fill?.logo} />}
       <span class="abbr">{t.abbr}</span>
       {/* Before kickoff the record, not a 0 that reads like a score. */}
       <span class={`score${pre ? ' is-pre' : ''}`}>{pre ? t.record : t.score}</span>
       {poss && <span class="poss" aria-label="has the ball" />}
+      {/* the winner: a mark pointing at the score (and a lighter, smaller score for the loser), not colour alone */}
+      {result === 'winner' && (
+        <>
+          <span class="win-mark" aria-hidden="true" />
+          <span class="sr">winner</span>
+        </>
+      )}
       {!pre && (
         <span class="sbar-glyphs">
           {tos != null && (

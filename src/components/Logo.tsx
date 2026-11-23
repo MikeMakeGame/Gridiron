@@ -1,12 +1,17 @@
 // A team logo that shows the team's abbreviation in its circle until the image arrives (or if it never does),
 // so a slow phone connection never shows an empty ring.
-// In the day look it asks ESPN for the light-background logo set instead of the dark one.
+// On a team fill it asks for the logo set that reads on that fill (`on`, from ../espn/colors); with no fill, the
+// set that reads on the page: the light-background set in the day look, the dark one otherwise. The offline
+// snapshot bundles only the dark set (format.ts smallLogo), so there `on` and the look change nothing.
 import { useState } from 'preact/hooks';
 import { useTheme } from '../theme';
+import type { LogoSet } from '../espn/colors';
 
-export function Logo({ src: dark, abbr, size }: { src: string; abbr: string; size: number }) {
+export function Logo({ src: dark, abbr, size, on }: { src: string; abbr: string; size: number; on?: LogoSet }) {
   const [loaded, setLoaded] = useState(false);
-  const src = useTheme() === 'day' ? dark.replace('/teamlogos/nfl/500-dark/', '/teamlogos/nfl/500/') : dark;
+  const theme = useTheme();
+  const set: LogoSet = on ?? (theme === 'day' ? 'light' : 'dark');
+  const src = set === 'light' ? dark.replace('/teamlogos/nfl/500-dark/', '/teamlogos/nfl/500/') : dark;
   return (
     <>
       {!loaded && (
