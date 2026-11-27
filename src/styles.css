@@ -581,12 +581,15 @@ img { display: block; }
   height: calc(2 * 1.35em); overflow: hidden;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
 }
-/* a short screen, decided once per load (.is-short on .app; not a height media query, which iOS flips mid-scroll
-   as its toolbar collapses) */
+/* a short screen (.is-short on .app, re-decided only when the width changes too, as on a rotation; not a height media
+   query, which iOS flips mid-scroll as its toolbar collapses) */
 .is-short .story-pin { padding-top: 8px; padding-bottom: 8px; }
 .is-short .story-pin .wp-rail { height: 32px; }
 .is-short .story-pin .wp-rail .mk { top: 0; }
 .is-short .story-pin .wp-readout { height: 1.35em; -webkit-line-clamp: 1; line-clamp: 1; }
+/* the score bar plus the pin would take too much of the screen (a phone in landscape; PIN_MAX_SHARE in hooks/usePoll):
+   the chart scrolls away */
+.is-unpinned .story-pin { position: static; }
 /* filter chips: one row that scrolls sideways on a phone, wrapping where there's room */
 .chips {
   display: flex; gap: 6px; margin: 8px calc(-1 * var(--gr)) 0 calc(-1 * var(--gl)); padding: 0 var(--gr) 0 var(--gl);
@@ -774,6 +777,7 @@ img { display: block; }
 .replay-exit { height: 44px; padding: 0 12px; font: 700 14px/1 var(--disp); letter-spacing: .14em; text-transform: uppercase; color: var(--tx2); box-shadow: inset 0 0 0 1px var(--line2); }
 .replay-scrub { flex: 1; accent-color: var(--hi); height: 28px; }
 .replay-pos { font: 700 15px/1 var(--disp); letter-spacing: .06em; color: var(--tx2); min-width: 6ch; text-align: right; }
+.replay-pos.is-held { color: var(--warn); } /* the replay holds before a play whose data doesn't read */
 
 /* nav, footer, states ---------------------------------------------------------- */
 /* bottom bars: where the thumb already is. The game's dock (back + its one action) and, on phones, the week bar. */
@@ -833,6 +837,8 @@ img { display: block; }
 .look[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--tx); color: var(--tx); }
 .empty, .error { padding: 48px var(--pad); text-align: center; font: 500 16px/1.3 var(--disp); letter-spacing: .08em; text-transform: uppercase; color: var(--tx2); }
 .error { color: var(--bad); }
+/* the newest update couldn't be read: one amber line under the score bar, the pill's twin */
+.feed-note { margin: 12px 0 0; padding: 9px 12px 8px; font: 500 15px/1.3 var(--disp); letter-spacing: .06em; color: var(--warn); background: rgb(255 176 32 / .12); border-left: 3px solid var(--warn); }
 
 /* motion: exactly two things ----------------------------------------------------- */
 @keyframes newplay { from { background: rgb(var(--sheen) / .16); border-left-color: var(--tx); } to { background: transparent; } }

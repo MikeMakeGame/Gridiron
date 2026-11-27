@@ -60,6 +60,8 @@ export interface EspnCompetitor {
 export interface EspnCompetition {
   id: string;
   date: string;
+  /** false while ESPN hasn't set the kickoff time (a TBD game); its `date` is then a placeholder. */
+  timeValid?: boolean;
   competitors: EspnCompetitor[];
   status: EspnStatus;
   situation?: EspnSituation;
@@ -151,6 +153,8 @@ export interface EspnSummary {
     id: string;
     week?: number;
     season?: { year: number; type: number };
+    /** As EspnCompetition's: false while the kickoff time isn't set (seen as true on every cached 2026 summary). */
+    timeValid?: boolean;
     competitions: (EspnCompetition & { competitors: EspnCompetitor[] })[];
   };
   drives?: { previous?: EspnDrive[]; current?: EspnDrive };

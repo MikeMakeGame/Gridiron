@@ -3,6 +3,7 @@
 // was published (clips post 6-20 min after the snap; checked 8 of 8 on PIT-NO, 10-25).
 import type { EspnVideo } from './types';
 import type { Play } from './model';
+import { espnUrlOrWarn } from './hosts'; // only ESPN's own pages and image hosts reach a link or an image
 
 export interface Clip {
   id: number;
@@ -21,23 +22,10 @@ export interface GameClips {
 const NOT_NAMES = new Set(['TD', 'FG', 'NFL', 'OT', 'The', 'A', 'An']);
 const WINDOW_MS = 60 * 60_000;
 
-// Only ESPN's own pages and image hosts reach a link or an image: the page talks to ESPN and nothing else.
-const ESPN_HOST = /(^|\.)(espn\.com|espncdn\.com)$|^espnmedia-cdn\.akamaized\.net$/;
-
-function espnUrl(u: string | undefined): string | null {
-  if (!u) return null;
-  try {
-    const url = new URL(u);
-    return url.protocol === 'https:' && ESPN_HOST.test(url.hostname) ? url.href : null;
-  } catch {
-    return null;
-  }
-}
-
 function toClip(v: EspnVideo): Clip | null {
-  const href = espnUrl(v.links?.web?.href);
+  const href = espnUrlOrWarn(v.links?.web?.href, 'a clip link', 'clip');
   if (!href || !v.headline) return null;
-  return { id: v.id, headline: v.headline, seconds: v.duration ?? null, thumb: espnUrl(v.thumbnail), href };
+  return { id: v.id, headline: v.headline, seconds: v.duration ?? null, thumb: espnUrlOrWarn(v.thumbnail, 'a clip thumbnail', 'thumb'), href };
 }
 
 // Capitalised words in the headline are the names ("Tyler Shough", "Barion Brown"); play text spells them "T.Shough".

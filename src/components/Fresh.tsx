@@ -1,16 +1,11 @@
-// The freshness pill: how old the data on screen is, and a tap to refetch.
-import { agoText } from '../format';
+// The freshness pill: how old the data on screen is, and a tap to refetch. What it says is ../fresh (`freshLook`).
 import { useNow } from '../hooks/usePoll';
 import { SNAPSHOT } from '../espn/api';
+import { freshLook, type FreshInput } from '../fresh';
 
 const SNAP_TIME = new Date(__BUILD_TIME__).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
 
-interface Props {
-  live: boolean; // the content can change right now (a game is in progress)
-  lastOk: number | null;
-  polling: boolean;
-  error: string | null;
-  retryAt?: number | null; // ESPN asked us to wait until then: count down instead of offering a tap that can't help
+interface Props extends FreshInput {
   onRefresh: () => void;
 }
 
@@ -20,32 +15,15 @@ export function Fresh(props: Props) {
   return <LiveFresh {...props} />;
 }
 
-function LiveFresh({ live, lastOk, polling, error, retryAt, onRefresh }: Props) {
+function LiveFresh({ onRefresh, ...input }: Props) {
   const now = useNow(1000);
-  const age = lastOk ? now - lastOk : Infinity;
-  let cls = 'is-idle';
-  // Nothing polls while nothing is live, so a ticking counter would be noise: say when it was fetched, and that a
-  // tap fetches again.
-  let text = lastOk ? `↻ ${new Date(lastOk).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}` : 'loading';
-  if (live && polling) text = lastOk ? agoText(age) : 'loading';
-  const wait = retryAt ? retryAt - now : 0;
-  if (wait > 0) {
-    const s = Math.ceil(wait / 1000);
-    cls = 'is-stale';
-    text = `ESPN says wait ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-  } else if ((live && polling) || error) {
-    if (age >= 120_000) {
-      cls = 'is-dead';
-      text = 'tap to refresh';
-    } else if (age >= 45_000) cls = 'is-stale';
-    else if (age < 30_000) cls = 'is-live';
-  }
+  const { cls, text, label } = freshLook(input, now);
   return (
     <button
       class={`fresh ${cls}`}
       onClick={onRefresh}
-      title={error ?? 'Tap to fetch again'}
-      aria-label={`${error ?? (lastOk ? `Updated ${new Date(lastOk).toLocaleTimeString()}` : 'Loading')}. Fetch again.`}
+      title={input.unreadable ? "ESPN's latest update couldn't be read; the game shown is the last one that could. Tap to fetch again." : input.error ?? 'Tap to fetch again'}
+      aria-label={label}
     >
       {cls === 'is-live' && <span class="fresh-dot" aria-hidden="true" />}
       {text}

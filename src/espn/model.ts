@@ -2,6 +2,7 @@
 import type { EspnCompetitor, EspnDrive, EspnPlay, EspnSituation, EspnSummary, EspnTeam } from './types';
 import { estimateEpa, type EpTable } from '../stats/ep';
 import { pairHome, teamFill, type LineLift, type TeamFill } from './colors';
+import { espnUrlOrWarn } from './hosts';
 
 export type PlayKind = 'pass' | 'rush' | 'kick' | 'punt' | 'fg' | 'xp' | 'penalty' | 'other';
 
@@ -168,8 +169,9 @@ function hex(c: string | undefined, fallback: string): string {
   return c.startsWith('#') ? c : `#${c}`;
 }
 
+// A logo on any host but ESPN's is dropped (./hosts), and the tile shows the team's abbreviation instead.
 function logoOf(t: EspnTeam): string {
-  return t.logo ?? t.logos?.[0]?.href ?? '';
+  return espnUrlOrWarn(t.logo ?? t.logos?.[0]?.href, `a logo for ${t.abbreviation}`, `logo:${t.abbreviation}`) ?? '';
 }
 
 function recordOf(c: EspnCompetitor): string {

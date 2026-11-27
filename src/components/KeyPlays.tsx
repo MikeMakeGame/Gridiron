@@ -31,7 +31,7 @@ export function KeyPlays({
   // only as far as it must (a row already in view stays put), so the chart never leaves the screen.
   useEffect(() => {
     if (!selected || !list.current) return;
-    const row = list.current.querySelector<HTMLElement>(`[data-play="${selected}"]`);
+    const row = list.current.querySelector<HTMLElement>(`[data-play="${CSS.escape(selected)}"]`);
     // No row for it: the play was picked by dragging along the chart, or a chip has since hidden its event. Nothing
     // to scroll to, and nothing wrong, so no log.
     if (!row) return;
@@ -59,18 +59,26 @@ export function KeyPlays({
         const m = r.m;
         const t = m.teamId === g.home.id ? g.home : g.away;
         const clip = m.primary ? clips.get(m.play.id) : undefined;
+        const on = m.play.id === selected;
+        const toggle = () => onSelect(on ? null : m.play.id);
         return (
-          <li
-            key={m.key}
-            data-play={m.play.id}
-            class={`kp kp-${m.kind}${m.play.id === selected ? ' is-sel' : ''}`}
-            style={teamVars(t)}
-            onClick={() => onSelect(m.play.id === selected ? null : m.play.id)}
-          >
+          <li key={m.key} data-play={m.play.id} class={`kp kp-${m.kind}${on ? ' is-sel' : ''}`} style={teamVars(t)} onClick={toggle}>
             <span class={`mk mk-${m.kind} is-static`} aria-hidden="true">
               <span class="mk-shape" />
             </span>
-            <div class="kp-main">
+            {/* The row's text is its button for a keyboard or a screen reader (the clip link beside it stays its own
+                control); a pointer can tap anywhere on the row. */}
+            <div
+              class="kp-main"
+              role="button"
+              tabIndex={0}
+              aria-pressed={on}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                e.preventDefault();
+                toggle();
+              }}
+            >
               <div class="kp-head">
                 {/* The team as a chip, so "NO" reads as New Orleans and never as "no highlight". */}
                 <span class={`kp-team${fillClass(t)}`}>{t.abbr}</span>

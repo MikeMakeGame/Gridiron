@@ -1,7 +1,7 @@
 // Polite polling for Preact: one request at a time, a timeout on every request, paused while the tab is hidden,
 // backs off on errors without ever beating the normal schedule. The engine is ./poller (tested on its own).
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
-import { Poller, type PollerDeps } from './poller';
+import { Poller, type NextPoll, type PollerDeps } from './poller';
 
 export interface PollState<T> {
   data: T | null;
@@ -12,7 +12,7 @@ export interface PollState<T> {
   refresh: () => void;
 }
 
-const browserDeps: PollerDeps = {
+export const browserDeps: PollerDeps = {
   now: () => Date.now(),
   setTimeout: (fn, ms) => window.setTimeout(fn, ms),
   clearTimeout: (id) => window.clearTimeout(id as number),
@@ -23,13 +23,13 @@ const browserDeps: PollerDeps = {
 /**
  * @param key      refetches from scratch when it changes
  * @param fetcher  the request; throw to report bad data (the last good data stays on screen)
- * @param nextIn   ms until the next poll given the latest data; null = it will never change, stop
+ * @param nextIn   when to poll next given the latest data (./poller NextPoll); null = it will never change, stop
  * @param enabled  false = don't poll yet (e.g. waiting on another request)
  */
 export function usePoll<T>(
   key: string,
   fetcher: (signal: AbortSignal) => Promise<T>,
-  nextIn: (data: T) => number | null,
+  nextIn: (data: T) => NextPoll,
   enabled = true,
 ): PollState<T> {
   const [data, setData] = useState<T | null>(null);
@@ -110,9 +110,48 @@ export function useHeight<E extends HTMLElement>(): [(el: E | null) => void, num
   return [ref, h];
 }
 
-/** A short phone screen (700 px tall or less), decided once when the page loads. Not a live media query: on iOS the
- *  toolbar collapsing mid-scroll changes the height, which would flip the pinned chart's size under the reader. */
-export const SHORT_SCREEN: boolean = typeof window !== 'undefined' && window.innerHeight > 0 && window.innerHeight <= 700;
+/** The screen's height, re-read only when its width changes too: a rotation, or a resized window. Not a live media
+ *  query: on iOS the toolbar collapsing mid-scroll changes the height alone, which would flip the pinned chart's size
+ *  under the reader. */
+export function useScreenHeight(): number {
+  const [h, setH] = useState(() => (typeof window !== 'undefined' ? window.innerHeight : 0));
+  useEffect(() => {
+    let w = window.innerWidth;
+    const check = () => {
+      if (window.innerWidth === w) return;
+      w = window.innerWidth;
+      setH(window.innerHeight);
+    };
+    // Some phones report the new size a moment after the rotation event, so the rotation checks again shortly after.
+    let t = 0;
+    const turned = () => {
+      check();
+      window.clearTimeout(t);
+      t = window.setTimeout(check, 300);
+    };
+    window.addEventListener('resize', check);
+    window.addEventListener('orientationchange', turned);
+    return () => {
+      window.removeEventListener('resize', check);
+      window.removeEventListener('orientationchange', turned);
+      window.clearTimeout(t);
+    };
+  }, []);
+  return h;
+}
+
+/** A short phone screen: 700 px tall or less. */
+export const isShortScreen = (h: number): boolean => h > 0 && h <= 700;
+
+/** The Story's chart pins under the score bar only while the two together take at most this share of the screen;
+ *  past it (a phone turned to landscape) the pin would leave too little list, so it scrolls with the page instead.
+ *  Measured on the built page (fix-1123, a final's Story tab): portrait 390x844 takes 46%, a short portrait 375x640
+ *  51% (an iPhone SE under Safari's bars, ~375x553, about 59%), 1024x768 56%, landscape 844x390 94%. The review's
+ *  estimate of ~45% would have unpinned the portrait phone the pin was built for, so the cut sits between the
+ *  portrait cases and landscape. */
+export const PIN_MAX_SHARE = 0.65;
+
+export const pinFits = (headH: number, pinH: number, screenH: number): boolean => !(screenH > 0 && headH + pinH > PIN_MAX_SHARE * screenH);
 
 /** Element width, kept current, for charts drawn in real pixels. */
 export function useWidth<E extends HTMLElement>(): [(el: E | null) => void, number] {

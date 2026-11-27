@@ -5,6 +5,7 @@ import type { EspnEvent, EspnScoreboard } from '../espn/types';
 import { clockLabel, homeBeside, teamInfo, type TeamInfo } from '../espn/model';
 import { fillClass, kickoffText, smallLogo, teamVars } from '../format';
 import { usePoll } from '../hooks/usePoll';
+import type { NextPoll } from '../hooks/poller';
 import { Fresh } from './Fresh';
 import { Logo } from './Logo';
 import { linkTo, setBoardWeek, useBoardWeek } from '../route';
@@ -15,7 +16,7 @@ import { Icon } from './Icons';
 import { useKeys } from '../hooks/useKeys';
 
 // Poll only while a listed game is live (see ../espn/cadence); otherwise one fetch, and the pill refetches on a tap.
-const nextIn = (sb: EspnScoreboard): number | null => (SNAPSHOT ? null : boardInterval(sb));
+const nextIn = (sb: EspnScoreboard): NextPoll => (SNAPSHOT ? null : boardInterval(sb));
 
 export function Scoreboard() {
   // The browsed week lives in the route, so it survives opening a game and is in the link.

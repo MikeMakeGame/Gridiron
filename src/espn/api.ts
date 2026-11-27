@@ -3,27 +3,47 @@
 import type { EspnScoreboard, EspnSummary } from './types';
 import type { EpTable } from '../stats/ep';
 import { baselinesProblem, type Baselines } from '../stats/baselines';
-import { RetryAfterError, parseRetryAfter } from '../hooks/poller';
+import { RetryAfterError, retryAfterMs, SLOW_DOWN_MS } from '../hooks/poller';
 
 const ESPN = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl';
 export const SNAPSHOT = import.meta.env.MODE === 'snapshot';
 
 // One cooldown for the whole tab: when ESPN pushes back on any request, every poller waits it out, new ones too.
 let espnNotBefore = 0;
-const slowDown = (ms: number) => `ESPN asked us to slow down; trying again in ${Math.max(1, Math.round(ms / 60_000))} min`;
+const slowDown = (ms: number) =>
+  `ESPN asked us to slow down; trying again ${ms < 60_000 ? 'shortly' : `in ${Math.round(ms / 60_000)} min`}`;
 
 async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   const early = espnNotBefore - Date.now();
   if (early > 0) throw new RetryAfterError(slowDown(early), early); // no request goes out
-  const r = await fetch(url, { signal });
-  if (r.status === 429 || r.status === 503) {
-    // Slow down when asked: Retry-After in seconds (or an HTTP date), else five minutes; never over an hour.
-    const wait = parseRetryAfter(r.headers.get('Retry-After'), Date.now());
+  // The pill and the page show these messages, so a browser's own wording ("Failed to fetch", "Unexpected token <")
+  // becomes a sentence; the raw error goes to the console.
+  let r: Response;
+  try {
+    r = await fetch(url, { signal });
+  } catch (e) {
+    if (signal?.aborted) throw e; // abandoned on purpose (a refresh, a timeout, leaving the page): not an error to show
+    console.warn(`Gridiron: couldn't reach ${url}`, e);
+    throw new Error("Couldn't reach ESPN (offline?)");
+  }
+  // The hard, tab-wide cooldown is for a 429 (always "slow down": its Retry-After, else five minutes) and for any
+  // explicit Retry-After; never over an hour, and "Retry-After: 0" is no wait at all. A 503 without one is a busy
+  // server, not a request to back off for minutes: it takes the normal error backoff (15, 30, 60 s and up).
+  const asked = retryAfterMs(r.headers.get('Retry-After'), Date.now());
+  if (r.status === 429 || (r.status === 503 && asked != null)) {
+    const wait = asked ?? SLOW_DOWN_MS; // only a 429 can arrive here without one
     espnNotBefore = Math.max(espnNotBefore, Date.now() + wait);
     throw new RetryAfterError(slowDown(wait), wait);
   }
+  if (r.status === 503) throw new Error('ESPN is busy right now (503)');
   if (!r.ok) throw new Error(`ESPN answered ${r.status}`);
-  return (await r.json()) as T;
+  try {
+    return (await r.json()) as T;
+  } catch (e) {
+    if (signal?.aborted) throw e;
+    console.warn(`Gridiron: ${url} answered with something that isn't JSON`, e);
+    throw new Error("ESPN sent a page we can't read");
+  }
 }
 
 /** A 200 with the wrong shape is an error, so it never replaces good data on screen. */

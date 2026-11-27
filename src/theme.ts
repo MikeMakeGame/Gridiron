@@ -27,10 +27,29 @@ function initial(): Theme {
 
 let current: Theme = initial();
 document.documentElement.dataset.theme = current;
+applyChrome(current);
+
+// The browser's own chrome follows the look: `color-scheme` (form controls, scrollbars, the page before the styles
+// load) and `theme-color` (the phone's status and address bars), which index.html starts as night's. The colour is
+// the look's own page colour, read from styles.css (`--bg`) once it applies, so it lives in one place.
+function applyChrome(t: Theme): void {
+  document.querySelector('meta[name="color-scheme"]')?.setAttribute('content', t === 'day' ? 'light' : 'dark');
+  // A task, not an animation frame: a tab opened in the background runs no frames until it's shown.
+  setTimeout(() => {
+    const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (!bg || !meta) {
+      console.warn(`Gridiron: the ${t} look's browser colour wasn't set (${!bg ? 'no --bg in styles.css yet' : 'no theme-color meta tag'})`);
+      return;
+    }
+    meta.setAttribute('content', bg);
+  }, 0);
+}
 
 export function setTheme(t: Theme): void {
   current = t;
   document.documentElement.dataset.theme = t;
+  applyChrome(t);
   try {
     localStorage.setItem(KEY, t);
   } catch {

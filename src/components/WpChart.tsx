@@ -2,7 +2,7 @@
 // story's events the filter chips leave on (scores, turnovers, big swings, ...), shaped like the drive caps.
 import type { Game } from '../espn/model';
 import { periodLabel } from '../espn/model';
-import { SHORT_SCREEN, useWidth } from '../hooks/usePoll';
+import { useWidth } from '../hooks/usePoll';
 import { teamVars, wpText } from '../format';
 import { railMarks, type Moment } from '../stats/moments';
 
@@ -12,17 +12,19 @@ export function WpChart({
   clipIds,
   selected = null,
   onSelect,
+  short = false,
 }: {
   g: Game;
   marks?: Moment[];
   clipIds?: Set<string>;
   selected?: string | null;
   onSelect?: (playId: string | null) => void;
+  /** A short screen (../hooks/usePoll `isShortScreen`, re-decided only on a rotation, so never mid-scroll). */
+  short?: boolean;
 }) {
   const [ref, w] = useWidth<HTMLDivElement>();
-  // On a short screen the pinned chart gives up height so the list under it keeps most of the screen (decided once
-  // per load, so it never resizes mid-scroll).
-  const H = SHORT_SCREEN ? 64 : 96;
+  // On a short screen the pinned chart gives up height so the list under it keeps most of the screen.
+  const H = short ? 64 : 96;
   const pts = g.plays.filter((p) => p.wpHome != null);
   const span = g.regulationSec;
   const x = (s: number) => (s / span) * w;

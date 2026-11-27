@@ -3,13 +3,18 @@
 // to head, against the league average) and Players (the position compare, then the box score).
 // A bottom dock holds back and the game's one action.
 import type { ComponentChildren } from 'preact';
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { getBaselines, getEpTable, getScoreboardForDay, getSummary, SNAPSHOT } from '../espn/api';
-import { gameInterval } from '../espn/cadence';
+import { useEffect, useErrorBoundary, useMemo, useRef, useState } from 'preact/hooks';
+import { getBaselines, getEpTable } from '../espn/api';
 import { matchClips } from '../espn/clips';
 import { buildGame, firstSnap, periodLabel, type Game, type Play, type TeamInfo } from '../espn/model';
+import { NO_READ, readSummary, replayAt, type ModelRead, type ReplayKnown } from '../espn/read';
+import type { EspnSummary } from '../espn/types';
+import { mergeAhead, type AheadSeen } from '../espn/ahead';
+import { DELAYED_MS, kickoffWait, KICKOFF_WINDOW_MS, PRE_MAX_WAIT_MS } from '../espn/cadence';
+import { DATA_SAVER_FACTOR } from '../hooks/poller';
+import { nextCheckText } from '../fresh';
 import { biggestPlays, possessionsLeft } from '../stats/live';
-import { dividers, groupCounts, moments, storyRows, visibleMoments } from '../stats/moments';
+import { dividers, groupCounts, moments, storyRows, visibleMoments, type Moment, type StoryRow } from '../stats/moments';
 import { useStoryFilters } from '../hooks/useStoryFilters';
 import { useBaseline } from '../hooks/useBaseline';
 import type { Baselines } from '../stats/baselines';
@@ -17,10 +22,10 @@ import { BaselineSwitch } from './Baseline';
 import { Standouts } from './Standouts';
 import { Fold } from './Fold';
 import { compareRows, edge, type CompareRow } from '../stats/teamstats';
-import type { EspnSummary } from '../espn/types';
 import type { EpTable } from '../stats/ep';
 import { agoText, fillClass, smallLogo, teamVars, wpText } from '../format';
-import { SHORT_SCREEN, useHeight, useNow, usePoll } from '../hooks/usePoll';
+import { browserDeps, isShortScreen, pinFits, useHeight, useNow, useScreenHeight } from '../hooks/usePoll';
+import { useGameFeed } from '../hooks/useGameFeed';
 import { Fresh } from './Fresh';
 import { Logo } from './Logo';
 import { boardHref, go, linkTo, useBoardWeek } from '../route';
@@ -41,38 +46,45 @@ import { Footer } from './Scoreboard';
 type Tab = 'now' | 'story' | 'standouts' | 'stats' | 'players';
 const TABS: Tab[] = ['now', 'story', 'standouts', 'stats', 'players'];
 
+const loggedFailures = new Set<string>();
+
+/** Logs a failure once per thing and message (a feed that keeps sending the same broken data logs one line), and
+ *  returns the message. */
+function logOnce(what: string, e: unknown): string {
+  const message = e instanceof Error ? e.message : String(e);
+  const k = `${what}\n${message}`;
+  if (!loggedFailures.has(k)) {
+    loggedFailures.add(k);
+    console.error(`Gridiron: couldn't ${what} (${message}); it is left out until the data reads`, e);
+  }
+  return message;
+}
+
+/** `fn()`, or `empty` (logged once) when it throws: for a derived part of the page that must not take the page down. */
+function attempt<T>(what: string, fn: () => T, empty: T): T {
+  try {
+    return fn();
+  } catch (e) {
+    logOnce(what, e);
+    return empty;
+  }
+}
+
 // The tab lives in the link (#/g/<id>/stats), so a reload or a shared link opens where it was.
 function tabFromHash(): Tab | null {
   const m = location.hash.match(/^#\/g\/\d+\/(\w+)/);
   return m && (TABS as string[]).includes(m[1]) ? (m[1] as Tab) : null;
 }
 
-/** Poll only while the game is live (see ../espn/cadence); the offline snapshot never polls. */
-function pollInterval(state: 'pre' | 'in' | 'post', statusName: string): number | null {
-  return SNAPSHOT ? null : gameInterval(state, statusName);
-}
-
-function nextIn(s: EspnSummary): number | null {
-  const c = s.header.competitions[0];
-  return pollInterval(c.status.type.state, c.status.type.name);
-}
-
 export function GamePage({ id }: { id: string }) {
-  const poll = usePoll(`g${id}`, (s) => getSummary(id, s), nextIn);
-  // The scoreboard feed carries the timeouts, and it posts each new snap 10-20 s before the game summary
-  // does (measured on MNF 10-19). It's the scoreboard for the game's own day, so it works for any week, and it
-  // follows the game: polled only while the game is live.
-  const kickoff = poll.data?.header.competitions[0].date ?? '';
-  const sb = usePoll(
-    `sb${id}-${kickoff}`,
-    (s) => getScoreboardForDay(kickoff, s),
-    (d) => {
-      const e = d.events.find((x) => x.id === id);
-      return e ? pollInterval(e.status.type.state, e.status.type.name) : null;
-    },
-    !!kickoff && !SNAPSHOT,
-  );
-  const sbSit = sb.data?.events.find((e) => e.id === id)?.competitions[0].situation;
+  // The game summary and the scoreboard for its day, on one lifecycle (../hooks/feed): the scoreboard carries the
+  // timeouts and posts each new snap 10-20 s before the summary does (measured on MNF 10-19), so it runs while the
+  // game is live; before kickoff one fetch is armed at the kickoff time; one pill tap refreshes both.
+  const feed = useGameFeed(id);
+  const poll = feed.summary;
+  const sb = feed.board;
+  const sbEvent = sb.data?.events.find((e) => e.id === id);
+  const sbSit = sbEvent?.competitions[0].situation;
   const timeouts = useMemo(
     () => (sbSit ? { home: sbSit.homeTimeouts ?? null, away: sbSit.awayTimeouts ?? null } : undefined),
     [sbSit?.homeTimeouts, sbSit?.awayTimeouts],
@@ -85,6 +97,12 @@ export function GamePage({ id }: { id: string }) {
   const [filters, toggleFilter] = useStoryFilters();
   // The score bar's height, so the Story tab's chart pins just under it.
   const [headRef, headH] = useHeight<HTMLDivElement>();
+  // A short screen shrinks the pinned chart; a screen where the score bar plus the pin would take too much of
+  // the height (a phone turned to landscape) unpins it. Both re-decided on a rotation, never mid-scroll.
+  const screenH = useScreenHeight();
+  const short = isShortScreen(screenH);
+  const [pinRef, pinH] = useHeight<HTMLDivElement>();
+  const pinned = pinFits(headH, pinH, screenH);
   // League averages for the Stats and Players tabs, and the standouts' weights; optional like the EP table.
   const [base, setBase] = useState<Baselines | null>(null);
   const [baseId, pickBase] = useBaseline(base);
@@ -104,70 +122,55 @@ export function GamePage({ id }: { id: string }) {
     return () => window.removeEventListener('hashchange', f);
   }, []);
 
-  // A payload that passes the shape check but still breaks the model keeps the last good game on screen.
-  const lastGood = useRef<{ data: EspnSummary; game: Game } | null>(null);
-  const full = useMemo(() => {
-    if (!poll.data) return null;
-    try {
-      const game = buildGame(poll.data, { ep, timeouts });
-      lastGood.current = { data: poll.data, game };
-      return game;
-    } catch (e) {
-      console.warn('Gridiron: could not read this update', e);
-      return lastGood.current?.game ?? null;
+  // A payload that passes the shape check but still breaks the model keeps the last good game on screen, and the pill
+  // counts its age from that game's fetch (../espn/read).
+  const readRef = useRef<ModelRead<Game>>(NO_READ);
+  const read = useMemo(
+    () => (readRef.current = readSummary(readRef.current, poll.data, poll.lastOk, (d) => buildGame(d, { ep, timeouts }))),
+    [poll.data, poll.lastOk, ep, timeouts],
+  );
+  const full = read.game;
+  // While the newest summary can't be read, the feed keeps fetching it for a while whatever it says (../hooks/feed).
+  const unreadableSince = read.problem?.since ?? null;
+  useEffect(() => feed.setUnreadable(unreadableSince), [unreadableSince]);
+  // A replay's cut that breaks the model holds at the last play it can show, says so, and never shows the full game
+  // (../espn/read `replayAt`).
+  const lastReplay = useRef<{ upto: number; game: Game } | null>(null);
+  // The lowest cut known to fail, for the summary and EP table it was learned on.
+  const replayKnown = useRef<{ data: EspnSummary | null; ep: EpTable | null; known: ReplayKnown }>({ data: null, ep: null, known: { lowestFail: null } });
+  const rp = useMemo(() => {
+    const data = read.data;
+    if (!data || replay == null) {
+      lastReplay.current = null;
+      return null;
     }
-  }, [poll.data, ep, timeouts]);
-  const unreadable = !!poll.data && lastGood.current?.data !== poll.data;
-  const g = useMemo(() => {
-    if (!poll.data || replay == null) return full;
-    try {
-      return buildGame(poll.data, { ep, upto: replay });
-    } catch {
-      return full;
+    if (replayKnown.current.data !== data || replayKnown.current.ep !== ep) {
+      replayKnown.current = { data, ep, known: { lowestFail: null } };
+      lastReplay.current = null;
     }
-  }, [poll.data, ep, replay, full]);
+    const r = replayAt(replay, (k) => buildGame(data, { ep, upto: k }), lastReplay.current, undefined, replayKnown.current.known);
+    if (r.game) lastReplay.current = { upto: r.upto, game: r.game };
+    return r;
+  }, [read.data, ep, replay]);
+  const g = rp ? rp.game : full;
+  const replayStuck = !!rp?.problem;
+  const shownCut = rp?.upto ?? replay;
 
   useEffect(() => {
     // A game opens at its top, not at wherever the scoreboard was scrolled to.
     window.scrollTo(0, 0);
   }, [id]);
 
-  // A snap the scoreboard already has and the summary doesn't yet: shown on top, labelled, until the summary catches up.
-  // Play ids match across the two feeds (checked on MNF 10-19). A snap the summary never posts (a reversed play)
-  // stops showing after 90 s. Scores and kickoffs count too (the down is unset right after them).
-  const aheadSince = useRef<{ id: string; at: number } | null>(null);
+  // A snap the scoreboard already has and the summary doesn't yet, shown on top as "just in" (../espn/ahead).
+  const aheadSeen = useRef<AheadSeen | null>(null);
   const ahead = useMemo(() => {
-    const lp = sbSit?.lastPlay;
-    if (!g || replay != null || g.state !== 'in' || !sbSit || !lp?.id) return null;
-    if (/timeout|end of|end period|two-minute|coin toss/i.test(`${lp.type?.text ?? ''} ${lp.text ?? ''}`)) return null;
-    if (g.plays.some((p) => p.id === lp.id)) return null;
-    if (aheadSince.current?.id !== lp.id) aheadSince.current = { id: lp.id, at: Date.now() };
-    if (Date.now() - aheadSince.current.at > 90_000) return null;
-    const ev = sb.data?.events.find((e) => e.id === id)?.competitions[0].competitors;
-    const scoreOf = (side: 'home' | 'away') => Number(ev?.find((c) => c.homeAway === side)?.score ?? NaN);
-    const hasSnap = (sbSit.down ?? 0) > 0;
-    return {
-      text: lp.text ?? '',
-      // No down after a score or before a kickoff: no situation line rather than a stale one.
-      situation: hasSnap ? [sbSit.shortDownDistanceText, sbSit.possessionText].filter(Boolean).join(' · ') : '',
-      redZone: hasSnap && !!sbSit.isRedZone,
-      possession: sbSit.possession ?? null,
-      // The spot for the field. The scoreboard's yard line counts from the home goal line.
-      spot:
-        hasSnap && sbSit.possession && sbSit.yardLine != null
-          ? {
-              offenseId: sbSit.possession,
-              ytg: sbSit.possession === g.home.id ? 100 - sbSit.yardLine : sbSit.yardLine,
-              down: sbSit.down ?? 0,
-              distance: sbSit.distance ?? 0,
-            }
-          : null,
-      wpHome: lp.probability?.homeWinPercentage ?? null,
-      // The score bar follows the newer feed too, so a just-in touchdown and the score agree.
-      home: scoreOf('home'),
-      away: scoreOf('away'),
-    };
-  }, [sbSit, g, replay, sb.data]);
+    const r = attempt("read the scoreboard's just-in play", () => mergeAhead(g, sbEvent, Date.now(), aheadSeen.current, replay != null), {
+      ahead: null,
+      seen: aheadSeen.current,
+    });
+    aheadSeen.current = r.seen;
+    return r.ahead;
+  }, [sbEvent, g, replay]);
 
   // Plays that arrived since the last poll get a one-shot highlight (never on first load or in replay scrubbing).
   const seen = useRef<Set<string> | null>(null);
@@ -194,13 +197,14 @@ export function GamePage({ id }: { id: string }) {
   // Replay auto-advance: one play every 1.2s.
   useEffect(() => {
     if (!playing || replay == null || !full) return;
-    if (replay >= full.plays.length) {
+    // A cut that can't be built stops the playback there; the arrows and the slider can still step past it.
+    if (replay >= full.plays.length || replayStuck) {
       setPlaying(false);
       return;
     }
     const t = window.setTimeout(() => setReplay(replay + 1), 1200);
     return () => window.clearTimeout(t);
-  }, [playing, replay, full]);
+  }, [playing, replay, full, replayStuck]);
 
   useEffect(() => {
     if (g) document.title = `${g.away.abbr} ${g.away.score} – ${g.home.abbr} ${g.home.score} · Gridiron`;
@@ -216,7 +220,10 @@ export function GamePage({ id }: { id: string }) {
   // Highlight clips pinned to their plays, and the plays that earn a marker. In a replay, only what has happened.
   // Matched against the whole game, so a replay's cut can't hand a later clip to an earlier play; then only the
   // plays the replay has reached keep theirs.
-  const allClips = useMemo(() => matchClips(poll.data?.videos, full?.plays ?? []), [poll.data, full]);
+  const allClips = useMemo(
+    () => attempt("pin ESPN's clips to their plays", () => matchClips(read.data?.videos, full?.plays ?? []), { byPlay: new Map(), game: [] }),
+    [read.data, full],
+  );
   const clips = useMemo(() => {
     if (!g || g === full) return allClips;
     const reached = new Set(g.plays.map((p) => p.id));
@@ -224,10 +231,20 @@ export function GamePage({ id }: { id: string }) {
   }, [allClips, g, full]);
   const clipIds = useMemo(() => new Set(clips.byPlay.keys()), [clips]);
   // Every event in the story, then the ones the chips leave on (the chart's rail and the list both show those).
-  const events = useMemo(() => (g ? moments(g, clipIds) : []), [g, clipIds]);
-  const marks = useMemo(() => visibleMoments(events, filters), [events, filters]);
-  const counts = useMemo(() => groupCounts(events), [events]);
-  const rows = useMemo(() => (g ? storyRows(marks, dividers(g), g.state !== 'post') : []), [g, marks]);
+  // The story is read here, outside the Story tab (the tab's dot needs it too), so a play text that breaks it is caught
+  // here: logged, and said in the Story tab, while every other tab carries on.
+  // The chips, the dividers and the list are read in the same guard.
+  const { events, marks, counts, rows, storyProblem } = useMemo(() => {
+    const none = { events: [] as Moment[], marks: [] as Moment[], counts: groupCounts([]), rows: [] as StoryRow[], storyProblem: null as string | null };
+    if (!g) return none;
+    try {
+      const events = moments(g, clipIds);
+      const marks = visibleMoments(events, filters);
+      return { events, marks, counts: groupCounts(events), rows: storyRows(marks, dividers(g), g.state !== 'post'), storyProblem: null };
+    } catch (e) {
+      return { ...none, storyProblem: logOnce("read the game's story from ESPN's play text", e) };
+    }
+  }, [g, clipIds, filters]);
 
   // Live opens on the field; a final opens on its story. A dot on Story when a key play lands while it's out of view.
   // The opening tab is decided once, when the game first loads: a game going final, or a replay, never moves the reader.
@@ -237,7 +254,8 @@ export function GamePage({ id }: { id: string }) {
   const tab: Tab = g?.state === 'pre' ? 'now' : picked ?? opened.current ?? 'now';
   const seenMarks = useRef<number | null>(null);
   if (g && (seenMarks.current == null || tab === 'story')) seenMarks.current = marks.length;
-  const storyNews = tab !== 'story' && seenMarks.current != null && marks.length > seenMarks.current;
+  // No dot during a replay: every step there "lands" a play, and the reader is driving it.
+  const storyNews = replay == null && tab !== 'story' && seenMarks.current != null && marks.length > seenMarks.current;
   const pickTab = (t: Tab) => {
     setTab(t);
     try {
@@ -248,228 +266,406 @@ export function GamePage({ id }: { id: string }) {
     window.scrollTo(0, 0);
   };
 
+  const live = g?.state === 'in';
+  const pill = (
+    <Fresh
+      live={live}
+      lastOk={read.acceptedAt}
+      polling={poll.polling}
+      error={poll.error}
+      unreadable={!!read.problem}
+      retryAt={poll.retryAt}
+      onRefresh={feed.refresh}
+    />
+  );
+
   if (!g) {
+    if (replay != null) {
+      // Not even the replay's first play could be built: say so, with the way out where the replay's bar was.
+      return (
+        <div class="app view-game">
+          <p class="error">The replay can't start: ESPN's data for this game's first plays doesn't read.</p>
+          <Dock
+            replay={
+              <div class="replay">
+                <button class="replay-exit" onClick={() => (setReplay(null), setPlaying(false))}>
+                  Exit
+                </button>
+              </div>
+            }
+          />
+        </div>
+      );
+    }
     return (
       <div class="app view-game">
-        {poll.error ? <p class="error">Couldn't load the game: {poll.error}</p> : <p class="empty">Loading…</p>}
-        <Dock />
+        {read.problem ? (
+          <p class="error">
+            ESPN sent this game in a shape Gridiron can't read yet. <NextCheck due={poll.polling ? poll.due : null} />
+          </p>
+        ) : poll.error ? (
+          <p class="error">Couldn't load the game: {poll.error}</p>
+        ) : (
+          <p class="empty">Loading…</p>
+        )}
+        <Dock>{pill}</Dock>
       </div>
     );
   }
 
-  const live = g.state === 'in';
-  const canReplay = full?.state === 'post' && full.plays.length > 0;
-  const poss = ahead?.possession ?? g.situation?.possessionId;
-  const lastSnap = [...g.plays].reverse().find((p) => p.kind !== 'kick' || g.plays.length < 3) ?? g.lastPlay;
-  const pivot = g.state === 'post' && !g.truncated ? biggestPlays(g, 1)[0] ?? null : null;
-  const headline = pivot ?? lastSnap;
-  const headClip = headline && !ahead ? clips.byPlay.get(headline.id) : undefined;
-  const possLeft = possessionsLeft(g);
-  const sit = g.situation;
-  const spot: Spot | null = ahead
-    ? ahead.spot
-    : sit && sit.ytg != null && sit.down > 0
-      ? { offenseId: sit.possessionId, ytg: sit.ytg, down: sit.down, distance: sit.distance }
-      : null;
-  const sitText = ahead ? ahead.situation : sit?.text;
-  const redZone = ahead ? ahead.redZone : !!sit?.redZone;
-  const giveaways = turnoverCounts(g);
-  const won = results(g);
-  // Totals are compared with the average only once the game is over (a replay's cut is mid-game).
-  const avg: AvgCtx = { base, id: baseId, final: g.state === 'post' && !g.truncated };
-
+  // Everything below reads the game, so it is built inside the page's own boundary: a throw there shows a way out and
+  // the pill instead of unmounting the page, and the feed above keeps polling.
+  const view: Game = g;
   return (
-    <div class={`app view-game${SHORT_SCREEN ? ' is-short' : ''}`} style={headH ? { '--head-h': `${headH}px` } : undefined}>
-      <div class="game-head" ref={headRef}>
-        <header class="scorebar">
-          <TeamCell t={withScore(g.away, ahead?.away)} poss={poss === g.away.id} tos={sit?.awayTimeouts ?? null} giveaways={giveaways.away} pre={g.state === 'pre'} result={won.away} />
-          <div class="sbar-mid">
-            <div class="clock">
-              {live && <Icon name="clock" size={14} />}
-              {g.clockText}
-            </div>
-          </div>
-          <TeamCell t={withScore(g.home, ahead?.home)} poss={poss === g.home.id} tos={sit?.homeTimeouts ?? null} giveaways={giveaways.home} pre={g.state === 'pre'} result={won.home} />
-        </header>
-        <nav class="tabs" role="tablist" aria-label="Game">
-          {TABS.map((t) => (
-            <button
-              key={t}
-              role="tab"
-              class={`tab${tab === t ? ' is-on' : ''}`}
-              aria-selected={tab === t}
-              // Before kickoff there's nothing behind the other three.
-              disabled={g.state === 'pre' && t !== 'now'}
-              onClick={() => pickTab(t)}
-            >
-              {tabLabel(t, g)}
-              {t === 'story' && storyNews && <span class="tab-dot" aria-label="new key play" />}
+    <Guard
+      name="game page"
+      retryKey={read.acceptedAt}
+      polling={poll.polling}
+      fallback={(retry, willRetry) => (
+        <div class="app view-game">
+          <p class="error">Something in ESPN's data broke this game's page.{willRetry ? ' It tries once more when a newer update reads.' : ''}</p>
+          <p class="empty">
+            <button class="week-next" onClick={retry}>
+              Try again
             </button>
-          ))}
-        </nav>
-      </div>
+          </p>
+          <Dock>{pill}</Dock>
+        </div>
+      )}
+    >
+      {() => {
+        const g = view;
+        const canReplay = full?.state === 'post' && full.plays.length > 0;
+        const poss = ahead?.possession ?? g.situation?.possessionId;
+        const lastSnap = [...g.plays].reverse().find((p) => p.kind !== 'kick' || g.plays.length < 3) ?? g.lastPlay;
+        const pivot = g.state === 'post' && !g.truncated ? biggestPlays(g, 1)[0] ?? null : null;
+        const headline = pivot ?? lastSnap;
+        const headClip = headline && !ahead ? clips.byPlay.get(headline.id) : undefined;
+        const possLeft = possessionsLeft(g);
+        const sit = g.situation;
+        const spot: Spot | null = ahead
+          ? ahead.spot
+          : sit && sit.ytg != null && sit.down > 0
+            ? { offenseId: sit.possessionId, ytg: sit.ytg, down: sit.down, distance: sit.distance }
+            : null;
+        const sitText = ahead ? ahead.situation : sit?.text;
+        const redZone = ahead ? ahead.redZone : !!sit?.redZone;
+        const giveaways = turnoverCounts(g);
+        const won = results(g);
+        // Totals are compared with the average only once the game is over (a replay's cut is mid-game).
+        const avg: AvgCtx = { base, id: baseId, final: g.state === 'post' && !g.truncated };
 
-      {tab === 'now' && (
-        <section class="surface" role="tabpanel">
-          {g.state === 'pre' && <Pregame g={g} />}
-          {sitText && (
-            <div class={`situation${redZone ? ' is-redzone' : ''}`}>
-              <span class="sit-text">{sitText}</span>
-              {redZone && (
-                <span class="sit-extra">
-                  <Icon name="zone" size={12} />
-                  Red zone
-                </span>
-              )}
-              {possLeft != null && possLeft < 6 && (
-                <span class="sit-extra">
-                  <Icon name="clock" size={12} />
-                  {possessionsText(possLeft)}
-                </span>
-              )}
-            </div>
-          )}
-          {live && <Field g={g} spot={spot} note={fieldNote(g)} />}
-          {live && spot && <DriveLine g={g} spot={spot} />}
-          {ahead ? (
-            <div class="lastplay">
-              <div class="lp-label">
-                Last play<span class="lp-age"> · just in, details to follow</span>
-              </div>
-              {/* No swing badge here: the summary may be several plays behind, so a difference would span them all. */}
-              <div class="lp-text">{ahead.text}</div>
-            </div>
-          ) : headline && (
-            <div class="lastplay">
-              <div class="lp-label">
-                {pivot ? `Play of the game · ${periodLabel(pivot.period)} ${pivot.clock}` : live ? 'Last play' : 'Final play'}
-                {live && replay == null && headline.wallclock && <PlayAge at={headline.wallclock} />}
-              </div>
-              <div class="lp-text">{headline.text}</div>
-              {/* One badge on the surface: who the play swung toward. Its EPA is in Story, under Drives. */}
-              <div class="play-badges">
-                <WpDelta g={g} p={headline} />
-              </div>
-              {headClip && <ClipThumb clip={headClip} />}
-            </div>
-          )}
-          {g.plays.length > 0 && (
-            <button class="jump-row" onClick={() => pickTab('story')}>
-              <span class="sec-label">Win probability</span>
-              <span class="sec-head">{wpHeadline(g)}</span>
-              <span class="chev" aria-hidden="true" />
-            </button>
-          )}
-          {g.state !== 'pre' && <Glance g={g} onMore={() => pickTab('stats')} />}
-          {g.state === 'post' && clips.game.length > 0 && (
-            <div class="game-clips">
-              <h3 class="sub-title">Highlights</h3>
-              {clips.game.map((c) => (
-                <div class="game-clip" key={c.id}>
-                  <ClipThumb clip={c} />
-                  <span>{c.headline}</span>
+        return (
+          <div class={`app view-game${short ? ' is-short' : ''}${pinned ? '' : ' is-unpinned'}`} style={headH ? { '--head-h': `${headH}px` } : undefined}>
+            <div class="game-head" ref={headRef}>
+              <header class="scorebar">
+                <TeamCell t={withScore(g.away, ahead?.away)} poss={poss === g.away.id} tos={sit?.awayTimeouts ?? null} giveaways={giveaways.away} pre={g.state === 'pre'} result={won.away} />
+                <div class="sbar-mid">
+                  <div class="clock">
+                    {live && <Icon name="clock" size={14} />}
+                    {g.clockText}
+                  </div>
                 </div>
-              ))}
+                <TeamCell t={withScore(g.home, ahead?.home)} poss={poss === g.home.id} tos={sit?.homeTimeouts ?? null} giveaways={giveaways.home} pre={g.state === 'pre'} result={won.home} />
+              </header>
+              {/* A screen reader hears a score change as it lands; never in a replay, where every step would speak. */}
+              <p class="sr" aria-live="polite">
+                {g.state !== 'pre' && replay == null ? scoreLine(withScore(g.away, ahead?.away), withScore(g.home, ahead?.home), g.state === 'post') : ''}
+              </p>
+              <nav class="tabs" role="tablist" aria-label="Game">
+                {TABS.map((t) => (
+                  <button
+                    key={t}
+                    role="tab"
+                    class={`tab${tab === t ? ' is-on' : ''}`}
+                    aria-selected={tab === t}
+                    // Before kickoff there's nothing behind the other three.
+                    disabled={g.state === 'pre' && t !== 'now'}
+                    onClick={() => pickTab(t)}
+                  >
+                    {tabLabel(t, g)}
+                    {t === 'story' && storyNews && <span class="tab-dot" aria-label="new key play" />}
+                  </button>
+                ))}
+              </nav>
             </div>
-          )}
-        </section>
-      )}
+            {read.problem && replay == null && <StuckNote at={read.acceptedAt} due={poll.polling ? poll.due : null} />}
+            {g.state === 'pre' && <KickoffNote kickoff={g.kickoff} timeValid={read.data?.header.timeValid !== false && read.data?.header.competitions[0].timeValid !== false} />}
 
-      {tab === 'story' && (
-        <section class="tabpane is-story" role="tabpanel">
-          {/* The chart, its rail and the chips stay pinned under the score bar while the list scrolls beneath them. */}
-          <div class="story">
-            <div class="story-pin">
-              {g.plays.length > 0 ? (
-                <WpChart g={g} marks={marks} clipIds={clipIds} selected={selected} onSelect={setSelected} />
-              ) : (
-                <p class="empty">The story starts at kickoff.</p>
-              )}
-              <StoryFilters on={filters} counts={counts} onToggle={toggleFilter} />
-            </div>
-            <KeyPlays g={g} rows={rows} total={events.length} clips={clips.byPlay} selected={selected} onSelect={setSelected} />
+            {replayStuck && <p class="feed-note" role="status">The replay can't go past this play: ESPN's data for the next one doesn't read.</p>}
+
+            {tab === 'now' && (
+              <TabGuard key="now" name={tabLabel('now', g)} retryKey={read.acceptedAt} polling={poll.polling}>
+                {() => (
+                  <section class="surface" role="tabpanel">
+                    {g.state === 'pre' && <Pregame g={g} />}
+                    {sitText && (
+                      <div class={`situation${redZone ? ' is-redzone' : ''}`}>
+                        <span class="sit-text">{sitText}</span>
+                        {redZone && (
+                          <span class="sit-extra">
+                            <Icon name="zone" size={12} />
+                            Red zone
+                          </span>
+                        )}
+                        {possLeft != null && possLeft < 6 && (
+                          <span class="sit-extra">
+                            <Icon name="clock" size={12} />
+                            {possessionsText(possLeft)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {live && <Field g={g} spot={spot} note={fieldNote(g)} />}
+                    {live && spot && <DriveLine g={g} spot={spot} />}
+                    {ahead ? (
+                      <div class="lastplay">
+                        <div class="lp-label">
+                          Last play<span class="lp-age"> · just in, details to follow</span>
+                        </div>
+                        {/* No swing badge here: the summary may be several plays behind, so a difference would span them all. */}
+                        <div class="lp-text">{ahead.text}</div>
+                      </div>
+                    ) : headline && (
+                      <div class="lastplay">
+                        <div class="lp-label">
+                          {pivot ? `Play of the game · ${periodLabel(pivot.period)} ${pivot.clock}` : live ? 'Last play' : 'Final play'}
+                          {live && replay == null && headline.wallclock && <PlayAge at={headline.wallclock} />}
+                        </div>
+                        <div class="lp-text">{headline.text}</div>
+                        {/* One badge on the surface: who the play swung toward. Its EPA is in Story, under Drives. */}
+                        <div class="play-badges">
+                          <WpDelta g={g} p={headline} />
+                        </div>
+                        {headClip && <ClipThumb clip={headClip} />}
+                      </div>
+                    )}
+                    {g.plays.length > 0 && (
+                      <button class="jump-row" onClick={() => pickTab('story')}>
+                        <span class="sec-label">Win probability</span>
+                        <span class="sec-head">{wpHeadline(g)}</span>
+                        <span class="chev" aria-hidden="true" />
+                      </button>
+                    )}
+                    {g.state !== 'pre' && <Glance g={g} onMore={() => pickTab('stats')} />}
+                    {g.state === 'post' && clips.game.length > 0 && (
+                      <div class="game-clips">
+                        <h3 class="sub-title">Highlights</h3>
+                        {clips.game.map((c) => (
+                          <div class="game-clip" key={c.id}>
+                            <ClipThumb clip={c} />
+                            <span>{c.headline}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                )}
+              </TabGuard>
+            )}
+
+            {tab === 'story' && (
+              <TabGuard key="story" name="Story" retryKey={read.acceptedAt} polling={poll.polling}>
+                {() => (
+                  <section class="tabpane is-story" role="tabpanel">
+                    {/* The chart, its rail and the chips stay pinned under the score bar while the list scrolls beneath them. */}
+                    <div class="story">
+                      <div class="story-pin" ref={pinRef}>
+                        {g.plays.length > 0 ? (
+                          <WpChart g={g} marks={marks} clipIds={clipIds} selected={selected} onSelect={setSelected} short={short} />
+                        ) : (
+                          <p class="empty">The story starts at kickoff.</p>
+                        )}
+                        <StoryFilters on={filters} counts={counts} onToggle={toggleFilter} />
+                      </div>
+                      {storyProblem ? (
+                        <p class="error">The story couldn't be read from ESPN's data.</p>
+                      ) : (
+                        <KeyPlays g={g} rows={rows} total={events.length} clips={clips.byPlay} selected={selected} onSelect={setSelected} />
+                      )}
+                    </div>
+                    {/* The drives sit past the list, one tap away, so the pinned chart never rides over them. */}
+                    {g.drives.length > 0 && (
+                      <Fold id="story-drives" label="Drives" headline={`${g.drives.length} drive${g.drives.length === 1 ? '' : 's'}`}>
+                        <Drives g={g} fresh={fresh} />
+                      </Fold>
+                    )}
+                  </section>
+                )}
+              </TabGuard>
+            )}
+
+            {tab === 'standouts' && (
+              <TabGuard key="standouts" name="Standouts" retryKey={read.acceptedAt} polling={poll.polling}>
+                {() => (
+                  <section class="tabpane" role="tabpanel">
+                    <Standouts g={g} base={base} epReady={!!ep} />
+                  </section>
+                )}
+              </TabGuard>
+            )}
+
+            {tab === 'stats' && (
+              <TabGuard key="stats" name="Stats" retryKey={read.acceptedAt} polling={poll.polling}>
+                {() => (
+                  <section class="tabpane" role="tabpanel">
+                    <BaselineSwitch base={base} id={baseId} onPick={pickBase} />
+                    <TeamStats g={g} avg={avg} />
+                    {g.plays.length > 0 && (
+                      <>
+                        <h3 class="sub-title">How well they're playing</h3>
+                        <Numbers g={g} epReady={!!ep} avg={avg} />
+                      </>
+                    )}
+                    {g.state === 'post' && !g.truncated && <Advanced g={g} />}
+                  </section>
+                )}
+              </TabGuard>
+            )}
+
+            {tab === 'players' && (
+              <TabGuard key="players" name="Players" retryKey={read.acceptedAt} polling={poll.polling}>
+                {() => (
+                  <section class="tabpane" role="tabpanel">
+                    <Players g={g} avg={avg} onPick={pickBase} />
+                  </section>
+                )}
+              </TabGuard>
+            )}
+
+            <Footer />
+            <Dock
+              replay={
+                replay != null && full ? (
+                  // Replay runs from the same bottom bar that started it.
+                  <div class="replay">
+                    <button class="replay-toggle" onClick={() => setPlaying(!playing)} aria-label={playing ? 'Pause' : 'Play'} title={playing ? 'Pause' : 'Play'}>
+                      {playing ? '❚❚' : '▶'}
+                    </button>
+                    <input
+                      class="replay-scrub"
+                      type="range"
+                      min={1}
+                      max={full.plays.length}
+                      value={replay}
+                      onInput={(e) => (setPlaying(false), setReplay(Number((e.target as HTMLInputElement).value)))}
+                      aria-label="Replay position"
+                      aria-valuetext={`Play ${shownCut} of ${full.plays.length}`}
+                    />
+                    {/* The play the page is showing: when a cut can't be built, the one it holds at, not the one asked for. */}
+                    <span class={`replay-pos${replayStuck ? ' is-held' : ''}`} title={replayStuck ? `Held at play ${shownCut}: play ${replay} doesn't read` : undefined}>
+                      {shownCut}/{full.plays.length}
+                    </span>
+                    <button class="replay-exit" onClick={() => (setReplay(null), setPlaying(false))}>
+                      Exit
+                    </button>
+                  </div>
+                ) : undefined
+              }
+            >
+              {canReplay && replay == null ? (
+                <button class="dock-btn" onClick={() => (setReplay(1), setPlaying(true))} title="Replay this game play by play, as if live">
+                  ▶ Replay
+                </button>
+              ) : g.state !== 'post' && replay == null ? (
+                pill
+              ) : null}
+            </Dock>
           </div>
-          {/* The drives sit past the list, one tap away, so the pinned chart never rides over them. */}
-          {g.drives.length > 0 && (
-            <Fold id="story-drives" label="Drives" headline={`${g.drives.length} drive${g.drives.length === 1 ? '' : 's'}`}>
-              <Drives g={g} fresh={fresh} />
-            </Fold>
-          )}
-        </section>
-      )}
-
-      {tab === 'standouts' && (
-        <section class="tabpane" role="tabpanel">
-          <Standouts g={g} base={base} epReady={!!ep} />
-        </section>
-      )}
-
-      {tab === 'stats' && (
-        <section class="tabpane" role="tabpanel">
-          <BaselineSwitch base={base} id={baseId} onPick={pickBase} />
-          <TeamStats g={g} avg={avg} />
-          {g.plays.length > 0 && (
-            <>
-              <h3 class="sub-title">How well they're playing</h3>
-              <Numbers g={g} epReady={!!ep} avg={avg} />
-            </>
-          )}
-          {g.state === 'post' && !g.truncated && <Advanced g={g} />}
-        </section>
-      )}
-
-      {tab === 'players' && (
-        <section class="tabpane" role="tabpanel">
-          <Players g={g} avg={avg} onPick={pickBase} />
-        </section>
-      )}
-
-      <Footer />
-      <Dock
-        replay={
-          replay != null && full ? (
-            // Replay runs from the same bottom bar that started it.
-            <div class="replay">
-              <button class="replay-toggle" onClick={() => setPlaying(!playing)} aria-label={playing ? 'Pause' : 'Play'} title={playing ? 'Pause' : 'Play'}>
-                {playing ? '❚❚' : '▶'}
-              </button>
-              <input
-                class="replay-scrub"
-                type="range"
-                min={1}
-                max={full.plays.length}
-                value={replay}
-                onInput={(e) => (setPlaying(false), setReplay(Number((e.target as HTMLInputElement).value)))}
-                aria-label="Replay position"
-                aria-valuetext={`Play ${replay} of ${full.plays.length}`}
-              />
-              <span class="replay-pos">
-                {replay}/{full.plays.length}
-              </span>
-              <button class="replay-exit" onClick={() => (setReplay(null), setPlaying(false))}>
-                Exit
-              </button>
-            </div>
-          ) : undefined
-        }
-      >
-        {canReplay && replay == null ? (
-          <button class="dock-btn" onClick={() => (setReplay(1), setPlaying(true))} title="Replay this game play by play, as if live">
-            ▶ Replay
-          </button>
-        ) : g.state !== 'post' && replay == null ? (
-          <Fresh
-            live={live}
-            lastOk={poll.lastOk}
-            polling={poll.polling}
-            error={poll.error ?? (unreadable ? "Couldn't read ESPN's latest update" : null)}
-            retryAt={poll.retryAt}
-            onRefresh={poll.refresh}
-          />
-        ) : null}
-      </Dock>
-    </div>
+        );
+      }}
+    </Guard>
   );
+}
+
+/**
+ * An error boundary that keeps the game page alive. A crash inside it shows `fallback` (with a retry) in its place;
+ * the feed, and whatever sits outside it, carry on. Once per crash, when a newer accepted game arrives (`retryKey`
+ * changes), it tries once more on its own, logged; if that crashes too, only the retry button tries again. A render
+ * that gets through ends the crash, so a later one gets its own automatic retry. `willRetry` tells the fallback
+ * whether that automatic retry is still to come (it is only while the feed is polling and it hasn't been spent). The
+ * content is a function so that it is built inside the boundary (by TabBody), not in GamePage's own render, which no
+ * boundary can catch.
+ */
+function Guard({
+  name,
+  retryKey,
+  polling,
+  children,
+  fallback,
+}: {
+  name: string;
+  retryKey: unknown;
+  /** The feed will fetch again on its own, so a newer game can arrive. */
+  polling: boolean;
+  children: () => ComponentChildren;
+  fallback: (retry: () => void, willRetry: boolean) => ComponentChildren;
+}) {
+  const keyNow = useRef(retryKey);
+  keyNow.current = retryKey;
+  const crashedAt = useRef<unknown>(undefined);
+  const autoRetried = useRef(false);
+  const [error, reset] = useErrorBoundary((e) => {
+    crashedAt.current = keyNow.current;
+    console.error(`Gridiron: the ${name} crashed`, e);
+  });
+  useEffect(() => {
+    if (!error || autoRetried.current || retryKey === crashedAt.current) return;
+    autoRetried.current = true;
+    console.warn(`Gridiron: a newer update arrived; trying the ${name} once more (if it crashes again, only "Try again" retries it)`);
+    reset();
+  }, [error, retryKey]);
+  if (!error) {
+    return (
+      <TabBody
+        render={children}
+        onRendered={() => {
+          autoRetried.current = false;
+        }}
+      />
+    );
+  }
+  return (
+    <>
+      {fallback(() => {
+        autoRetried.current = false;
+        reset();
+      }, polling && !autoRetried.current)}
+    </>
+  );
+}
+
+/** One tab's boundary: a crash shows "Try again" in the tab's place and resets only that tab; the score bar, the pill
+ *  and the polling carry on. */
+function TabGuard({ name, retryKey, polling, children }: { name: string; retryKey: unknown; polling: boolean; children: () => ComponentChildren }) {
+  return (
+    <Guard
+      name={`${name} tab`}
+      retryKey={retryKey}
+      polling={polling}
+      fallback={(retry, willRetry) => (
+        <section class="tabpane tab-crash" role="tabpanel">
+          <p class="error">
+            Something in ESPN's data broke the {name} tab.{willRetry ? ' It tries once more when a newer update reads.' : ''}
+          </p>
+          <p class="empty">
+            <button class="week-next" onClick={retry}>
+              Try again
+            </button>
+          </p>
+        </section>
+      )}
+    >
+      {children}
+    </Guard>
+  );
+}
+
+/** Builds a guarded view. `onRendered` runs after a render that got through (a render that throws runs no effects),
+ *  which is how its Guard knows a crash is over. */
+function TabBody({ render, onRendered }: { render: () => ComponentChildren; onRendered: () => void }) {
+  useEffect(onRendered);
+  return <>{render()}</>;
 }
 
 /** The bottom bar, where a thumb already is: back to the games on the left, this game's one action on the right. */
@@ -597,6 +793,8 @@ function withScore(t: TeamInfo, s: number | undefined): TeamInfo {
   return s != null && Number.isFinite(s) && s > t.score ? { ...t, score: s } : t;
 }
 
+const scoreLine = (away: TeamInfo, home: TeamInfo, final: boolean) => `${final ? 'Final: ' : ''}${away.abbr} ${away.score}, ${home.abbr} ${home.score}`;
+
 type Result = 'winner' | 'loser' | null;
 
 /** A final's winner and loser (a tie, a live game and a replay's cut have neither). */
@@ -665,6 +863,43 @@ function DriveLine({ g, spot }: { g: Game; spot: Spot }) {
         <span>first snap next</span>
       )}
     </div>
+  );
+}
+
+// The newest update couldn't be read: said on the page, not only on the pill, with how old the game shown is, and
+// whether anything is still fetching (the feed retries for a while, ../hooks/feed UNREADABLE_RETRY_MS).
+function StuckNote({ at, due }: { at: number | null; due: number | null }) {
+  const now = useNow(5000);
+  return (
+    <p class="feed-note" role="status">
+      Can't read ESPN's latest update{at ? `; showing the game as of ${agoText(now - at)}` : ''}. {nextCheckText(due, now)}
+    </p>
+  );
+}
+
+function NextCheck({ due }: { due: number | null }) {
+  const now = useNow(5000);
+  return <>{nextCheckText(due, now)}</>;
+}
+
+// A game still "pre" well past its kickoff time, or with no kickoff time at all: the page says what the schedule is
+// doing (../espn/cadence), Data Saver's stretch included.
+function KickoffNote({ kickoff, timeValid }: { kickoff: string; timeValid: boolean }) {
+  const now = useNow(30_000);
+  const wait = kickoffWait(kickoff, now, timeValid);
+  if (wait === 'ahead' || wait === 'due') return null;
+  const stretch = browserDeps.saveData() ? DATA_SAVER_FACTOR : 1;
+  const at = new Date(kickoff).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  const text =
+    wait === 'unknown'
+      ? `Kickoff time not set yet; checking every ${PRE_MAX_WAIT_MS / 3_600_000} h.`
+      : wait === 'delayed'
+        ? `Kickoff delayed? It was due at ${at} and ESPN hasn't started the game. Checking every ${Math.round((DELAYED_MS * stretch) / 60_000)} min.`
+        : `Stopped waiting for kickoff: ESPN still hasn't started the game ${Math.round(KICKOFF_WINDOW_MS / 3_600_000)} hours after it was due. Tap the pill to check.`;
+  return (
+    <p class="feed-note" role="status">
+      {text}
+    </p>
   );
 }
 

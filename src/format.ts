@@ -58,9 +58,14 @@ export function wpText(x: number, final = false): string {
   return `${Math.round(x * 100)}%`;
 }
 
-export function agoText(ms: number): string {
+/** An age, short: "45s", "3m", "2h". */
+export function ageText(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
-  if (s < 60) return `${s}s ago`;
+  if (s < 60) return `${s}s`;
   const m = Math.floor(s / 60);
-  return m < 60 ? `${m}m ago` : `${Math.floor(m / 60)}h ago`;
+  return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h`;
+}
+
+export function agoText(ms: number): string {
+  return `${ageText(ms)} ago`;
 }
